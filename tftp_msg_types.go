@@ -32,9 +32,19 @@ const (
 	ModeMail string = "mail"
 )
 
+/*
+	RRQ/WRQ packet
+
+	2 bytes     string    1 byte     string   1 byte
+	------------------------------------------------
+	| Opcode |  Filename  |   0  |    Mode    |   0  |
+	------------------------------------------------
+
+*/
+
 //TFTPReadWritePkt RRQ/WRQ packet
 type TFTPReadWritePkt struct {
-	Opcode   []byte
+	Opcode   uint8
 	Filename string
 	Mode     string
 }
@@ -42,7 +52,7 @@ type TFTPReadWritePkt struct {
 //Pack returns []byte payload
 func (p *TFTPReadWritePkt) Pack() []byte {
 	var buff bytes.Buffer
-	buff.Write(p.Opcode)
+	buff.Write([]byte{byte(p.Opcode)})
 	buff.Write([]byte(p.Filename))
 	buff.Write([]byte{0})
 	buff.Write([]byte(p.Mode))
@@ -52,7 +62,10 @@ func (p *TFTPReadWritePkt) Pack() []byte {
 
 //Unpack loads []byte payload
 func (p *TFTPReadWritePkt) Unpack(data []byte) {
-	panic("not implimented")
+	p.Opcode = data[0]
+	msgParsed := bytes.Split(data[1:len(data)], []byte{00})
+	p.Filename = string(msgParsed[0])
+	p.Mode = string(msgParsed[1])
 }
 
 //TFTPDataPkt TFTP data Packet
