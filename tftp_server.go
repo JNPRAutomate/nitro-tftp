@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"log"
 	"net"
 )
@@ -14,20 +13,21 @@ type UDPServer struct {
 
 //Listen Listen to
 func (s *UDPServer) Listen() {
+	cMgr := &TFTPClientMgr{}
 	s.listenAddr = &net.UDPAddr{IP: net.ParseIP("0.0.0.0"), Port: 69}
 
 	var err error
-	buffer := make([]byte, 9600)
+	bb := make([]byte, 9600)
 
 	s.sock, err = net.ListenUDP("udp4", s.listenAddr)
 	if err != nil {
 		log.Println(err)
 	}
-	s.sock.SetReadBuffer(1024000)
-	//TODO: Send ACKStartMsg on control channel
+	s.sock.SetReadBuffer(2048000)
 	for {
 		//handle each packet in a seperate go routine
-		_, _, err := s.sock.ReadFromUDP(buffer)
+		msgLen, _, _, addr, err := s.sock.ReadMsgUDP(bb, nil)
+		log.Println(msgLen)
 		if err != nil {
 			switch err := err.(type) {
 			case net.Error:
@@ -39,22 +39,27 @@ func (s *UDPServer) Listen() {
 			}
 			return
 		}
-		msg := bytes.Trim(buffer, "\x00")
 
-		if int(msg[0]) == OpcodeRead {
+		msg := bb[:msgLen]
+		log.Println(msg)
+
+		if int(msg[1]) == OpcodeRead {
 			pkt := &TFTPReadWritePkt{}
 			pkt.Unpack(msg)
-			log.Printf("%#v", pkt)
-		} else if int(msg[0]) == OpcodeWrite {
+			cMgr.Start(addr, pkt)
+		} else if int(msg[1]) == OpcodeWrite {
 			pkt := &TFTPReadWritePkt{}
 			pkt.Unpack(msg)
-			log.Printf("%#v", pkt)
-		} else if int(msg[0]) == OpcodeACK {
-
-		} else if int(msg[0]) == OpcodeErr {
-
-		} else if int(msg[0]) == OpcodeData {
-
+			cMgr.Start(addr, pkt)
+		} else if int(msg[1]) == OpcodeACK {
+			pkt := &TFTPAckPkt{}
+			pkt.Unpack(msg)
+		} else if int(msg[1]) == OpcodeErr {
+			pkt := &TFTPErrPkt{}
+			pkt.Unpack(msg)
+		} else if int(msg[1]) == OpcodeData {
+			pkt := &TFTPDataPkt{}
+			pkt.Unpack(msg)
 		}
 
 	}

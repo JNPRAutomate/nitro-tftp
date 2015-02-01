@@ -42,6 +42,12 @@ const (
 
 */
 
+//TFTPPacket interface to packet types
+type TFTPPacket interface {
+	Pack() []byte
+	Unpack()
+}
+
 //TFTPReadWritePkt RRQ/WRQ packet
 type TFTPReadWritePkt struct {
 	Opcode   uint8
@@ -84,6 +90,10 @@ func (p *TFTPDataPkt) Pack() []byte {
 	return buff.Bytes()
 }
 
+//Unpack loads []byte payload
+func (p *TFTPDataPkt) Unpack(data []byte) {
+}
+
 //TFTPAckPkt TFTP ACK Packet
 type TFTPAckPkt struct {
 	Opcode []byte
@@ -96,6 +106,10 @@ func (p *TFTPAckPkt) Pack() []byte {
 	buff.Write(p.Opcode)
 	buff.Write([]byte(p.Block))
 	return buff.Bytes()
+}
+
+//Unpack loads []byte payload
+func (p *TFTPAckPkt) Unpack(data []byte) {
 }
 
 //TFTPErrPkt TFTP error Packet
@@ -113,6 +127,10 @@ func (p *TFTPErrPkt) Pack() []byte {
 	buff.Write([]byte(p.ErrMsg))
 	buff.Write([]byte{0})
 	return buff.Bytes()
+}
+
+//Unpack loads []byte payload
+func (p *TFTPErrPkt) Unpack(data []byte) {
 }
 
 //TFTPOptionPkt TFTP Option packet
@@ -137,4 +155,8 @@ func (p *TFTPOptionPkt) Pack() []byte {
 	buff.Write(p.ValueN)
 	buff.Write([]byte{0})
 	return buff.Bytes()
+}
+
+//Unpack loads []byte payload
+func (p *TFTPOptionPkt) Unpack() {
 }
