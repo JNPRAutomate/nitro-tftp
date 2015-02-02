@@ -5,6 +5,8 @@ import (
 	"net"
 )
 
+var ServerNet = "udp4"
+
 //UDPServer A server to listen for UDP messages
 type UDPServer struct {
 	listenAddr *net.UDPAddr
@@ -13,7 +15,7 @@ type UDPServer struct {
 
 //Listen Listen to
 func (s *UDPServer) Listen() {
-	cMgr := &TFTPClientMgr{}
+	cMgr := &TFTPClientMgr{Connections: make(map[string]*TFTPConn)}
 	s.listenAddr = &net.UDPAddr{IP: net.ParseIP("0.0.0.0"), Port: 69}
 
 	var err error
@@ -41,23 +43,26 @@ func (s *UDPServer) Listen() {
 		}
 
 		msg := bb[:msgLen]
+		//clear buffer by emptying slice but not reallocating memory
+		bb = bb[:cap(bb)]
 		log.Println(msg)
 
-		if int(msg[1]) == OpcodeRead {
+		if uint16(msg[1]) == OpcodeRead {
 			pkt := &TFTPReadWritePkt{}
 			pkt.Unpack(msg)
 			cMgr.Start(addr, pkt)
-		} else if int(msg[1]) == OpcodeWrite {
+		} else if uint16(msg[1]) == OpcodeWrite {
 			pkt := &TFTPReadWritePkt{}
 			pkt.Unpack(msg)
 			cMgr.Start(addr, pkt)
-		} else if int(msg[1]) == OpcodeACK {
+		} else if uint16(msg[1]) == OpcodeACK {
 			pkt := &TFTPAckPkt{}
 			pkt.Unpack(msg)
-		} else if int(msg[1]) == OpcodeErr {
+			cMgr.ACK(addr, pkt)
+		} else if uint16(msg[1]) == OpcodeErr {
 			pkt := &TFTPErrPkt{}
 			pkt.Unpack(msg)
-		} else if int(msg[1]) == OpcodeData {
+		} else if uint16(msg[1]) == OpcodeData {
 			pkt := &TFTPDataPkt{}
 			pkt.Unpack(msg)
 		}

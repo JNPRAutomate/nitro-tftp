@@ -12,15 +12,34 @@ import "bytes"
 
 const (
 	//OpcodeRead Read request (RRQ)
-	OpcodeRead int = 1
+	OpcodeRead uint16 = 1
 	//OpcodeWrite Write request (WRQ)
-	OpcodeWrite int = 2
+	OpcodeWrite uint16 = 2
 	//OpcodeData Data (DATA)
-	OpcodeData int = 3
+	OpcodeData uint16 = 3
 	//OpcodeACK Acknowledgment (ACK)
-	OpcodeACK int = 4
+	OpcodeACK uint16 = 4
 	//OpcodeErr Error (ERROR)
-	OpcodeErr int = 5
+	OpcodeErr uint16 = 5
+)
+
+const (
+	//ErrorNotDefined Not defined, see error message (if any).
+	ErrorNotDefined = 0
+	//ErrorFileNotFound File not found.
+	ErrorFileNotFound = 1
+	//ErrorAccessViolation Access violation.
+	ErrorAccessViolation = 2
+	//ErrorDiskFull Disk full or allocation exceeded.
+	ErrorDiskFull = 3
+	//ErrorIllegalOp Illegal TFTP operation.
+	ErrorIllegalOp = 4
+	//ErrorUnknownID Unknown transfer ID.
+	ErrorUnknownID = 5
+	//ErrorFileAlreadyExists File already exists.
+	ErrorFileAlreadyExists = 6
+	//ErrorNoSuchUser No such user.
+	ErrorNoSuchUser = 7
 )
 
 const (
@@ -50,7 +69,7 @@ type TFTPPacket interface {
 
 //TFTPReadWritePkt RRQ/WRQ packet
 type TFTPReadWritePkt struct {
-	Opcode   uint8
+	Opcode   uint16
 	Filename string
 	Mode     string
 }
@@ -68,24 +87,26 @@ func (p *TFTPReadWritePkt) Pack() []byte {
 
 //Unpack loads []byte payload
 func (p *TFTPReadWritePkt) Unpack(data []byte) {
-	p.Opcode = data[0]
-	msgParsed := bytes.Split(data[1:len(data)], []byte{00})
+	p.Opcode = uint16(data[1])
+	msgParsed := bytes.Split(data[2:len(data)], []byte{00})
 	p.Filename = string(msgParsed[0])
 	p.Mode = string(msgParsed[1])
 }
 
 //TFTPDataPkt TFTP data Packet
 type TFTPDataPkt struct {
-	Opcode []byte
-	Block  []byte
+	Opcode uint16
+	Block  int
 	Data   []byte
 }
 
 //Pack returns []byte payload
 func (p *TFTPDataPkt) Pack() []byte {
 	var buff bytes.Buffer
-	buff.Write(p.Opcode)
-	buff.Write([]byte(p.Block))
+	buff.Write([]byte{0})
+	buff.Write([]byte{byte(p.Opcode)})
+	buff.Write([]byte{0})
+	buff.Write([]byte{byte(p.Block)})
 	buff.Write([]byte(p.Data))
 	return buff.Bytes()
 }
