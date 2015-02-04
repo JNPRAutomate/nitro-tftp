@@ -1,12 +1,15 @@
 package main
 
-import "bytes"
+import (
+	"bytes"
+	"encoding/binary"
+)
 
 /*
 	TFTP v2 RFC http://tools.ietf.org/html/rfc1350
 	TFTP Option Extension http://tools.ietf.org/html/rfc2347
-	TODO: TFTP Blocksize Option http://tools.ietf.org/html/rfc2348http://tools.ietf.org/html/rfc2348
-	TODO: TFTP Timeout Interval and Transfer Size Options http://tools.ietf.org/html/rfc2349http://tools.ietf.org/html/rfc2349
+	TODO: TFTP Blocksize Option http://tools.ietf.org/html/rfc2348
+	TODO: TFTP Timeout Interval and Transfer Size Options http://tools.ietf.org/html/rfc2349
 	TODO: TFTP Windowsize Option http://tools.ietf.org/html/rfc7440
 */
 
@@ -25,21 +28,21 @@ const (
 
 const (
 	//ErrorNotDefined Not defined, see error message (if any).
-	ErrorNotDefined = 0
+	ErrorNotDefined uint16 = 0
 	//ErrorFileNotFound File not found.
-	ErrorFileNotFound = 1
+	ErrorFileNotFound uint16 = 1
 	//ErrorAccessViolation Access violation.
-	ErrorAccessViolation = 2
+	ErrorAccessViolation uint16 = 2
 	//ErrorDiskFull Disk full or allocation exceeded.
-	ErrorDiskFull = 3
+	ErrorDiskFull uint16 = 3
 	//ErrorIllegalOp Illegal TFTP operation.
-	ErrorIllegalOp = 4
+	ErrorIllegalOp uint16 = 4
 	//ErrorUnknownID Unknown transfer ID.
-	ErrorUnknownID = 5
+	ErrorUnknownID uint16 = 5
 	//ErrorFileAlreadyExists File already exists.
-	ErrorFileAlreadyExists = 6
+	ErrorFileAlreadyExists uint16 = 6
 	//ErrorNoSuchUser No such user.
-	ErrorNoSuchUser = 7
+	ErrorNoSuchUser uint16 = 7
 )
 
 const (
@@ -49,6 +52,11 @@ const (
 	ModeOctet string = "octet"
 	//ModeMail mode mail
 	ModeMail string = "mail"
+)
+
+const (
+	//DefaultBlockSize the default block size of a connection
+	DefaultBlockSize int = 512
 )
 
 /*
@@ -76,8 +84,11 @@ type TFTPReadWritePkt struct {
 
 //Pack returns []byte payload
 func (p *TFTPReadWritePkt) Pack() []byte {
-	var buff bytes.Buffer
-	buff.Write([]byte{byte(p.Opcode)})
+	buff := new(bytes.Buffer)
+	err := binary.Write(buff, binary.BigEndian, p.Opcode)
+	if err != nil {
+		panic(err)
+	}
 	buff.Write([]byte(p.Filename))
 	buff.Write([]byte{0})
 	buff.Write([]byte(p.Mode))
@@ -96,36 +107,52 @@ func (p *TFTPReadWritePkt) Unpack(data []byte) {
 //TFTPDataPkt TFTP data Packet
 type TFTPDataPkt struct {
 	Opcode uint16
-	Block  int
+	Block  uint16
 	Data   []byte
 }
 
 //Pack returns []byte payload
 func (p *TFTPDataPkt) Pack() []byte {
-	var buff bytes.Buffer
+	var err error
+	buff := new(bytes.Buffer)
+	err = binary.Write(buff, binary.BigEndian, p.Opcode)
+	if err != nil {
+		panic(err)
+	}
 	buff.Write([]byte{0})
-	buff.Write([]byte{byte(p.Opcode)})
-	buff.Write([]byte{0})
-	buff.Write([]byte{byte(p.Block)})
+	err = binary.Write(buff, binary.BigEndian, p.Block)
+	if err != nil {
+		panic(err)
+	}
 	buff.Write([]byte(p.Data))
 	return buff.Bytes()
 }
 
 //Unpack loads []byte payload
 func (p *TFTPDataPkt) Unpack(data []byte) {
+	p.Opcode = uint16(data[1])
+	p.Block = uint16(data[3])
+	p.Data = data[4:]
 }
 
 //TFTPAckPkt TFTP ACK Packet
 type TFTPAckPkt struct {
-	Opcode []byte
-	Block  []byte
+	Opcode uint16
+	Block  uint16
 }
 
 //Pack returns []byte payload
 func (p *TFTPAckPkt) Pack() []byte {
-	var buff bytes.Buffer
-	buff.Write(p.Opcode)
-	buff.Write([]byte(p.Block))
+	var err error
+	buff := new(bytes.Buffer)
+	err = binary.Write(buff, binary.BigEndian, p.Opcode)
+	if err != nil {
+		panic(err)
+	}
+	err = binary.Write(buff, binary.BigEndian, p.Block)
+	if err != nil {
+		panic(err)
+	}
 	return buff.Bytes()
 }
 
@@ -135,16 +162,23 @@ func (p *TFTPAckPkt) Unpack(data []byte) {
 
 //TFTPErrPkt TFTP error Packet
 type TFTPErrPkt struct {
-	Opcode  []byte
-	ErrCode []byte
+	Opcode  uint16
+	ErrCode uint16
 	ErrMsg  string
 }
 
 //Pack returns []byte payload
 func (p *TFTPErrPkt) Pack() []byte {
-	var buff bytes.Buffer
-	buff.Write(p.Opcode)
-	buff.Write([]byte(p.ErrCode))
+	var err error
+	buff := new(bytes.Buffer)
+	err = binary.Write(buff, binary.BigEndian, p.Opcode)
+	if err != nil {
+		panic(err)
+	}
+	err = binary.Write(buff, binary.BigEndian, p.ErrCode)
+	if err != nil {
+		panic(err)
+	}
 	buff.Write([]byte(p.ErrMsg))
 	buff.Write([]byte{0})
 	return buff.Bytes()
@@ -156,7 +190,7 @@ func (p *TFTPErrPkt) Unpack(data []byte) {
 
 //TFTPOptionPkt TFTP Option packet
 type TFTPOptionPkt struct {
-	Opcode    []byte
+	Opcode    uint16
 	OptionAck []byte
 	Value1    []byte
 	OptN      []byte
@@ -165,8 +199,11 @@ type TFTPOptionPkt struct {
 
 //Pack returns []byte payload
 func (p *TFTPOptionPkt) Pack() []byte {
-	var buff bytes.Buffer
-	buff.Write(p.Opcode)
+	buff := new(bytes.Buffer)
+	err := binary.Write(buff, binary.BigEndian, p.Opcode)
+	if err != nil {
+		panic(err)
+	}
 	buff.Write(p.OptionAck)
 	buff.Write([]byte{0})
 	buff.Write(p.Value1)

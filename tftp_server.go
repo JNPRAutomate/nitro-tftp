@@ -3,9 +3,18 @@ package main
 import (
 	"log"
 	"net"
+	"strconv"
+	"strings"
 )
 
-var ServerNet = "udp4"
+const (
+	//ServerNet default network to listen on
+	ServerNet = "udp4"
+	//DefaultPort default port to listen on
+	DefaultPort = 69
+	//DefaultIP default IP to listen on
+	DefaultIP = "0.0.0.0"
+)
 
 //UDPServer A server to listen for UDP messages
 type UDPServer struct {
@@ -13,13 +22,16 @@ type UDPServer struct {
 	sock       *net.UDPConn
 }
 
-//Listen Listen to
+//Listen Listen for connections
 func (s *UDPServer) Listen() {
-	cMgr := &TFTPClientMgr{Connections: make(map[string]*TFTPConn)}
-	s.listenAddr = &net.UDPAddr{IP: net.ParseIP("0.0.0.0"), Port: 69}
-
 	var err error
-	bb := make([]byte, 9600)
+	cMgr := &TFTPClientMgr{Connections: make(map[string]*TFTPConn)}
+	//s.listenAddr = &net.UDPAddr{IP: net.ParseIP(DefaultIP), Port: DefaultPort}
+	s.listenAddr, err = net.ResolveUDPAddr(ServerNet, strings.Join([]string{DefaultIP, strconv.Itoa(DefaultPort)}, ":"))
+	if err != nil {
+		panic(err)
+	}
+	bb := make([]byte, 1024000)
 
 	s.sock, err = net.ListenUDP("udp4", s.listenAddr)
 	if err != nil {
@@ -47,6 +59,7 @@ func (s *UDPServer) Listen() {
 		bb = bb[:cap(bb)]
 		log.Println(msg)
 
+		//TODO pull both bytes of message
 		if uint16(msg[1]) == OpcodeRead {
 			pkt := &TFTPReadWritePkt{}
 			pkt.Unpack(msg)
@@ -55,15 +68,8 @@ func (s *UDPServer) Listen() {
 			pkt := &TFTPReadWritePkt{}
 			pkt.Unpack(msg)
 			cMgr.Start(addr, pkt)
-		} else if uint16(msg[1]) == OpcodeACK {
-			pkt := &TFTPAckPkt{}
-			pkt.Unpack(msg)
-			cMgr.ACK(addr, pkt)
 		} else if uint16(msg[1]) == OpcodeErr {
 			pkt := &TFTPErrPkt{}
-			pkt.Unpack(msg)
-		} else if uint16(msg[1]) == OpcodeData {
-			pkt := &TFTPDataPkt{}
 			pkt.Unpack(msg)
 		}
 
