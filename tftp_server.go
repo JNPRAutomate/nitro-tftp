@@ -16,24 +16,43 @@ const (
 	DefaultIP = "0.0.0.0"
 )
 
-//UDPServer A server to listen for UDP messages
-type UDPServer struct {
-	listenAddr *net.UDPAddr
-	sock       *net.UDPConn
+//TFTPServer A server to listen for UDP messages
+type TFTPServer struct {
+	listenAddr  *net.UDPAddr
+	sock        *net.UDPConn
+	incomingDir string
+	outgoingDir string
+	protocol    string
 }
 
-//Listen Listen for connections
-func (s *UDPServer) Listen() {
+func (s *TFTPServer) LoadConfig(c *Config) error {
 	var err error
-	cMgr := &TFTPClientMgr{Connections: make(map[string]*TFTPConn)}
-	//s.listenAddr = &net.UDPAddr{IP: net.ParseIP(DefaultIP), Port: DefaultPort}
-	s.listenAddr, err = net.ResolveUDPAddr(ServerNet, strings.Join([]string{DefaultIP, strconv.Itoa(DefaultPort)}, ":"))
+	if c == nil {
+		//load default
+		c = &Config{}
+		c.IncomingDir = "./incoming"
+		c.OutgoingDir = "./outgoing"
+		c.IP = net.ParseIP("0.0.0.0")
+		c.Port = 69
+		c.Protocol = "udp4"
+	}
+	//listen addr
+	s.listenAddr, err = net.ResolveUDPAddr(c.Protocol, strings.Join([]string{c.IP.String(), strconv.Itoa(c.Port)}, ":"))
 	if err != nil {
 		panic(err)
 	}
+	s.protocol = c.Protocol
+	return nil
+}
+
+//Listen Listen for connections
+func (s *TFTPServer) Listen() {
+	var err error
+	cMgr := &TFTPClientMgr{Connections: make(map[string]*TFTPConn)}
+	//s.listenAddr = &net.UDPAddr{IP: net.ParseIP(DefaultIP), Port: DefaultPort}
 	bb := make([]byte, 1024000)
 
-	s.sock, err = net.ListenUDP("udp4", s.listenAddr)
+	s.sock, err = net.ListenUDP(s.protocol, s.listenAddr)
 	if err != nil {
 		log.Println(err)
 	}

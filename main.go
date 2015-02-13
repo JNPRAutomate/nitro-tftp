@@ -1,6 +1,6 @@
 package main
 
 func main() {
-	s := &UDPServer{}
+	s := &TFTPServer{}
 	s.Listen()
 }

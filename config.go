@@ -1,6 +1,12 @@
 package main
 
-import "net"
+import (
+	"encoding/json"
+	"fmt"
+	"io/ioutil"
+	"net"
+	"os"
+)
 
 //Config server configration file
 type Config struct {
@@ -23,7 +29,46 @@ func NewConfig() *Config {
 	return &Config{IncomingDir: "./incoming", OutgoingDir: "./outgoing", IP: net.ParseIP("0.0.0.0"), Port: 69, Protocol: "udp4"}
 }
 
-//Parse parse config file
-func (c *Config) Parse() {
+//Open open a new config file
+func (c *Config) Open(config string) {
+	file, e := ioutil.ReadFile(config)
+	if e != nil {
+		fmt.Printf("File error: %v\n", e)
+		os.Exit(1)
+	}
 
+	newConfig := &Config{}
+	if err := json.Unmarshal(file, &newConfig); err != nil {
+		panic(err)
+	}
+	c.IncomingDir = newConfig.IncomingDir
+	c.OutgoingDir = newConfig.OutgoingDir
+	c.IP = newConfig.IP
+	c.Port = newConfig.Port
+	c.Protocol = newConfig.Protocol
+}
+
+func (c *Config) MarshalJSON() ([]byte, error) {
+	return []byte(fmt.Sprintf("{\"incomingdir\" : %s, \"outgoingdir\" : %s,\"listenip\":\"%s\",\"port\":%d,\"protocol\":\"%s\"}", c.IncomingDir, c.OutgoingDir, c.IP.String(), c.Port, c.Protocol)), nil
+}
+
+func (c *Config) UnmarshalJSON(data []byte) error {
+	var tmpConfig struct {
+		IncomingDir string
+		OutgoingDir string
+		IP          string `json:"listenip"`
+		Port        int
+		Protocol    string
+	}
+	err := json.Unmarshal(data, &tmpConfig)
+	if err != nil {
+		return err
+	}
+	c.IncomingDir = tmpConfig.IncomingDir
+	c.OutgoingDir = tmpConfig.OutgoingDir
+	c.IP = net.ParseIP(tmpConfig.IP)
+	c.Port = tmpConfig.Port
+	c.Protocol = tmpConfig.Protocol
+
+	return nil
 }
