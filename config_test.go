@@ -1,6 +1,9 @@
 package main
 
-import "testing"
+import (
+	"testing"
+	"time"
+)
 
 func TestOpenConfig(t *testing.T) {
 	cfg := &Config{}
@@ -19,12 +22,17 @@ func TestConfigLoadAndOpen(t *testing.T) {
 	cfg.Open("/home/rcameron/gopath/src/github.com/jnprautomate/nitrotftp/example_config.cfg")
 	s := &TFTPServer{}
 	s.LoadConfig(cfg)
-	s.Listen()
-	//stop after 5 seconds
+	ctrlChan := s.Listen()
+	timer := time.NewTimer(time.Second * 5)
+	<-timer.C
+	close(ctrlChan)
 }
 
 func TestConfigLoadDefaultAndOpen(t *testing.T) {
 	s := &TFTPServer{}
-	s.LoadConfig(nil)
-	s.Listen()
+	s.LoadConfig(&Config{})
+	ctrlChan := s.Listen()
+	timer := time.NewTimer(time.Second * 5)
+	<-timer.C
+	close(ctrlChan)
 }
