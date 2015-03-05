@@ -5,7 +5,7 @@ A golang based TFTP server that makes it super simple to use across all major pl
 
 ## Goals
 - Maximize performance for sending data over TFTP
-- A multi-platform server (Mac (i386/amd64), Windows (i386/amd64), Linux (i386/amd64/arm), FreeBSD(i386/amd64))
+- A multi-platform server: Mac (i386/amd64), Windows (i386/amd64), Linux (i386/amd64/arm), FreeBSD(i386/amd64)
 - Consistant user experience across all platforms
 - Allows for running in a daemon mode or on demand 
 - Flexible configuration options availabe as a config file or with command line switches
