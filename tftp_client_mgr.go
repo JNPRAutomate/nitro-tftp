@@ -1,8 +1,10 @@
 package main
 
 import (
+	"bufio"
 	"log"
 	"net"
+	"os"
 	"sync"
 	"time"
 )
@@ -17,7 +19,7 @@ type TFTPClientMgr struct {
 func (c *TFTPClientMgr) Start(addr *net.UDPAddr, msg interface{}) {
 	//add connection
 	if tftpMsg, ok := msg.(*TFTPReadWritePkt); ok {
-		nc := &TFTPConn{Type: tftpMsg.Opcode, remote: addr}
+		nc := &TFTPConn{Type: tftpMsg.Opcode, remote: addr, blockSize: DefaultBlockSize, filename: msg.(*TFTPReadWritePkt).Filename}
 		c.Connections[addr.String()] = nc
 		if tftpMsg.Opcode == OpcodeRead {
 			//Setting block to min of 1
@@ -57,12 +59,32 @@ func (c *TFTPClientMgr) sendData(tid string) {
 	if r, err := net.DialUDP(ServerNet, nil, c.Connections[tid].remote); err != nil {
 		log.Println(err)
 	} else {
-		pkt := &TFTPDataPkt{Opcode: OpcodeData, Block: c.Connections[tid].block, Data: []byte("food")}
-		log.Printf("%#v %#v", r.RemoteAddr(), r.LocalAddr())
-		log.Printf("%b", pkt.Pack())
-		r.SetWriteDeadline(time.Now().Add(1 * time.Second))
-		if _, err := r.Write(pkt.Pack()); err != nil {
+		buffer := make([]byte, c.Connections[tid].blockSize)
+		inputFile, err := os.OpenFile(c.Connections[tid].filename, os.O_RDWR|os.O_CREATE, 0660)
+		defer inputFile.Close()
+		if err != nil {
+			//Unable to open file, send error to client
 			log.Println(err)
+		}
+		inputReader := bufio.NewReader(inputFile)
+		for {
+			dLen, err := inputReader.Read(buffer)
+			log.Println(c.Connections[tid].blockSize, dLen)
+			if err != nil {
+				//unable to read from file
+				log.Println(err)
+			}
+			pkt := &TFTPDataPkt{Opcode: OpcodeData, Block: c.Connections[tid].block, Data: buffer}
+			r.SetWriteDeadline(time.Now().Add(1 * time.Second))
+			if _, err := r.Write(pkt.Pack()); err != nil {
+				log.Println(err)
+			}
+			buffer = buffer[:cap(buffer)]
+			//TODO: send next packet once block is sent
+			c.Connections[tid].block = c.Connections[tid].block + 1
+			if c.Connections[tid].blockSize > dLen {
+				return
+			}
 		}
 	}
 }
@@ -76,10 +98,14 @@ func (c *TFTPClientMgr) recieveData(tid string) {
 		c.wg.Add(1)
 		go func() {
 			defer c.wg.Done()
+			outputFile, err := os.OpenFile(c.Connections[tid].filename, os.O_RDWR|os.O_CREATE, 0660)
+			if err != nil {
+				//Unable to open file, send error to client
+				log.Println(err)
+			}
 			for {
 				//handle each packet in a seperate go routine
 				msgLen, _, _, _, err := r.ReadMsgUDP(bb, nil)
-				log.Println(msgLen)
 				if err != nil {
 					switch err := err.(type) {
 					case net.Error:
@@ -99,6 +125,13 @@ func (c *TFTPClientMgr) recieveData(tid string) {
 					pkt := &TFTPDataPkt{}
 					pkt.Unpack(msg)
 					//	log.Printf("%#v", pkt)
+					//Write Data
+					ofb, err := outputFile.Write(pkt.Data)
+					if err != nil {
+						//Unable to write to file
+						log.Println(err)
+					}
+					log.Printf("Wrote %d bytes to file %s", ofb, c.Connections[tid].filename)
 					c.Connections[tid].block = pkt.Block
 					if len(pkt.Data) < DefaultBlockSize {
 						//last packet
@@ -127,4 +160,5 @@ type TFTPConn struct {
 	remote    *net.UDPAddr
 	block     uint16
 	blockSize int
+	filename  string
 }
