@@ -59,33 +59,64 @@ func (c *TFTPClientMgr) sendData(tid string) {
 	if r, err := net.DialUDP(ServerNet, nil, c.Connections[tid].remote); err != nil {
 		log.Println(err)
 	} else {
-		buffer := make([]byte, c.Connections[tid].blockSize)
-		inputFile, err := os.OpenFile(c.Connections[tid].filename, os.O_RDWR|os.O_CREATE, 0660)
-		defer inputFile.Close()
-		if err != nil {
-			//Unable to open file, send error to client
-			log.Println(err)
-		}
-		inputReader := bufio.NewReader(inputFile)
-		for {
-			dLen, err := inputReader.Read(buffer)
-			log.Println(c.Connections[tid].blockSize, dLen)
+		c.wg.Add(1)
+		go func() {
+			defer c.wg.Done()
+			buffer := make([]byte, c.Connections[tid].blockSize)
+			bb := make([]byte, 1024000)
+			inputFile, err := os.OpenFile(c.Connections[tid].filename, os.O_RDWR|os.O_CREATE, 0660)
+			defer inputFile.Close()
 			if err != nil {
-				//unable to read from file
+				//Unable to open file, send error to client
 				log.Println(err)
 			}
-			pkt := &TFTPDataPkt{Opcode: OpcodeData, Block: c.Connections[tid].block, Data: buffer}
-			r.SetWriteDeadline(time.Now().Add(1 * time.Second))
-			if _, err := r.Write(pkt.Pack()); err != nil {
-				log.Println(err)
+			inputReader := bufio.NewReader(inputFile)
+			for {
+				dLen, err := inputReader.Read(buffer)
+				log.Println(c.Connections[tid].blockSize, dLen)
+				if err != nil {
+					//unable to read from file
+					log.Println(err)
+				}
+				pkt := &TFTPDataPkt{Opcode: OpcodeData, Block: c.Connections[tid].block, Data: buffer}
+				r.SetWriteDeadline(time.Now().Add(1 * time.Second))
+				if _, err := r.Write(pkt.Pack()); err != nil {
+					log.Println(err)
+				}
+				buffer = buffer[:cap(buffer)]
+				//TODO: send next packet once block is sent
+				msgLen, _, _, _, err := r.ReadMsgUDP(bb, nil)
+				if err != nil {
+					switch err := err.(type) {
+					case net.Error:
+						if err.Timeout() {
+							log.Println(err)
+						} else if err.Temporary() {
+							log.Println(err)
+						}
+					}
+					return
+				}
+				//pull message from buffer
+				msg := bb[:msgLen]
+				//clear buffer
+				bb = bb[:cap(bb)]
+
+				//TODO: Process ACK
+				if uint16(msg[1]) == OpcodeACK {
+					pkt := &TFTPAckPkt{}
+					pkt.Unpack(msg)
+					log.Printf("%#v", pkt)
+					//Write Data
+					c.Connections[tid].block = c.Connections[tid].block + 1
+				} else {
+					//TODO: send error
+				}
+				if c.Connections[tid].blockSize > dLen {
+					return
+				}
 			}
-			buffer = buffer[:cap(buffer)]
-			//TODO: send next packet once block is sent
-			c.Connections[tid].block = c.Connections[tid].block + 1
-			if c.Connections[tid].blockSize > dLen {
-				return
-			}
-		}
+		}()
 	}
 }
 
@@ -94,10 +125,10 @@ func (c *TFTPClientMgr) recieveData(tid string) {
 		log.Println(err)
 	} else {
 		c.sendAck(r, tid)
-		bb := make([]byte, 1024000)
 		c.wg.Add(1)
 		go func() {
 			defer c.wg.Done()
+			bb := make([]byte, 1024000)
 			outputFile, err := os.OpenFile(c.Connections[tid].filename, os.O_RDWR|os.O_CREATE, 0660)
 			if err != nil {
 				//Unable to open file, send error to client
