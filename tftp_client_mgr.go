@@ -2,6 +2,8 @@ package main
 
 import (
 	"bufio"
+	"bytes"
+	"encoding/binary"
 	"log"
 	"net"
 	"os"
@@ -73,12 +75,12 @@ func (c *TFTPClientMgr) sendData(tid string) {
 			inputReader := bufio.NewReader(inputFile)
 			for {
 				dLen, err := inputReader.Read(buffer)
-				log.Println(c.Connections[tid].blockSize, dLen)
+
 				if err != nil {
 					//unable to read from file
 					log.Println(err)
 				}
-				pkt := &TFTPDataPkt{Opcode: OpcodeData, Block: c.Connections[tid].block, Data: buffer}
+				pkt := &TFTPDataPkt{Opcode: OpcodeData, Block: c.Connections[tid].block, Data: bytes.Trim(buffer, "\x00")}
 				r.SetWriteDeadline(time.Now().Add(1 * time.Second))
 				if _, err := r.Write(pkt.Pack()); err != nil {
 					log.Println(err)
@@ -106,7 +108,6 @@ func (c *TFTPClientMgr) sendData(tid string) {
 				if uint16(msg[1]) == OpcodeACK {
 					pkt := &TFTPAckPkt{}
 					pkt.Unpack(msg)
-					log.Printf("%#v", pkt)
 					//Write Data
 					c.Connections[tid].block = c.Connections[tid].block + 1
 				} else {
@@ -134,6 +135,7 @@ func (c *TFTPClientMgr) recieveData(tid string) {
 				//Unable to open file, send error to client
 				log.Println(err)
 			}
+			outputWriter := bufio.NewWriter(outputFile)
 			for {
 				//handle each packet in a seperate go routine
 				msgLen, _, _, _, err := r.ReadMsgUDP(bb, nil)
@@ -152,12 +154,12 @@ func (c *TFTPClientMgr) recieveData(tid string) {
 				msg := bb[:msgLen]
 				//clear buffer
 				bb = bb[:cap(bb)]
-				if uint16(msg[1]) == OpcodeData {
+				opCode := binary.BigEndian.Uint16(msg[:2])
+				if opCode == OpcodeData {
 					pkt := &TFTPDataPkt{}
 					pkt.Unpack(msg)
-					//	log.Printf("%#v", pkt)
 					//Write Data
-					ofb, err := outputFile.Write(pkt.Data)
+					ofb, err := outputWriter.Write(pkt.Data)
 					if err != nil {
 						//Unable to write to file
 						log.Println(err)
@@ -171,11 +173,14 @@ func (c *TFTPClientMgr) recieveData(tid string) {
 						if err != nil {
 							panic(err)
 						}
+						err = outputWriter.Flush()
+						if err != nil {
+							log.Println(err)
+						}
 						return
 					}
 					//continue to read data
 					c.sendAck(r, tid)
-					//TODO: Write data
 				} else {
 					//TODO: send error
 				}
