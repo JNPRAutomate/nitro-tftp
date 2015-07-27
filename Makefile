@@ -8,3 +8,6 @@ build:
 
 all:
 	gox -ldflags="-X main.GitHash $(GIT_HASH) -X main.BuildDate $(DATE_TAG) -X main.Version $(VERSION)"
+
+release: all
+	@echo "Release"
