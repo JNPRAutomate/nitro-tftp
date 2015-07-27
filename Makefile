@@ -5,3 +5,6 @@ VERSION=$(shell git tag)
 build:
 	go build -ldflags="-X main.GitHash $(GIT_HASH) -X main.BuildDate $(DATE_TAG) -X main.Version $(VERSION)"
 	mv nitro-tftp test/
+
+all:
+	gox -ldflags="-X main.GitHash $(GIT_HASH) -X main.BuildDate $(DATE_TAG) -X main.Version $(VERSION)"
