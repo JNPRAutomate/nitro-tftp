@@ -1,13 +1,39 @@
 package main
 
 import (
-	"log"
+	"flag"
+	"fmt"
 	"os"
 	"os/signal"
+
+	log "github.com/Sirupsen/logrus"
 )
 
+//Version info
+var GitHash = ""
+var Version = ""
+var BuildDate = ""
+
+var debugFlag bool
+var configFile string
+var versionFlag bool
+
+func init() {
+	flag.StringVar(&configFile, "config", "", "Configuration file")
+	flag.BoolVar(&debugFlag, "debug", false, "Enable debug logging")
+	flag.BoolVar(&versionFlag, "version", false, "Display Version")
+}
+
 func main() {
+	flag.Parse()
+
+	if versionFlag {
+		fmt.Printf("Built: %s\nVersion: %s\nGit Commit: %s\n", BuildDate, Version, GitHash)
+		return
+	}
+
 	s := &TFTPServer{}
+	s.Debug = debugFlag
 	s.LoadConfig(&Config{})
 	ctrlChan := s.Listen()
 
@@ -16,5 +42,5 @@ func main() {
 	sig := <-c
 	close(c)
 	close(ctrlChan)
-	log.Println("Got", sig)
+	log.Println("Caught Signal", sig)
 }

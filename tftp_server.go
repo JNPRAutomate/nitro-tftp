@@ -1,12 +1,13 @@
 package main
 
 import (
-	"log"
 	"net"
 	"os"
 	"strconv"
 	"strings"
 	"sync"
+
+	log "github.com/Sirupsen/logrus"
 )
 
 const (
@@ -27,11 +28,14 @@ type TFTPServer struct {
 	outgoingDir string
 	protocol    string
 	wg          sync.WaitGroup
+	Connections map[string]*TFTPConn
+	clientwg    sync.WaitGroup
+	Debug       bool
 }
 
 func (s *TFTPServer) LoadConfig(c *Config) error {
 	var err error
-	if c.IncomingDir == "" || c.OutgoingDir == "" {
+	if c.IncomingDir == "" && c.OutgoingDir == "" {
 		//load default
 		c = &Config{}
 		c.IncomingDir = "./incoming"
@@ -40,6 +44,8 @@ func (s *TFTPServer) LoadConfig(c *Config) error {
 		c.Port = 69
 		c.Protocol = "udp4"
 	}
+	s.incomingDir = c.IncomingDir
+	s.outgoingDir = c.OutgoingDir
 	//check inc dir exists and can be written to
 	iStat, err := os.Stat(c.IncomingDir)
 	if err != nil {
@@ -87,9 +93,9 @@ func (s *TFTPServer) LoadConfig(c *Config) error {
 
 //Listen Listen for connections
 func (s *TFTPServer) Listen() chan int {
+	s.Connections = make(map[string]*TFTPConn)
 	s.ctrlChan = make(chan int)
 	var err error
-	cMgr := &TFTPClientMgr{Connections: make(map[string]*TFTPConn)}
 	//s.listenAddr = &net.UDPAddr{IP: net.ParseIP(DefaultIP), Port: DefaultPort}
 	bb := make([]byte, 1024000)
 
@@ -119,7 +125,6 @@ func (s *TFTPServer) Listen() chan int {
 		for {
 			//handle each packet in a seperate go routine
 			msgLen, _, _, addr, err := s.sock.ReadMsgUDP(bb, nil)
-			log.Println(msgLen)
 			if err != nil {
 				switch err := err.(type) {
 				case net.Error:
@@ -136,17 +141,17 @@ func (s *TFTPServer) Listen() chan int {
 			msg := bb[:msgLen]
 			//clear buffer by emptying slice but not reallocating memory
 			bb = bb[:cap(bb)]
-			log.Println(msg)
+			log.Println("New Connection from", addr.String())
 
 			//TODO pull both bytes of message
 			if uint16(msg[1]) == OpcodeRead {
 				pkt := &TFTPReadWritePkt{}
 				pkt.Unpack(msg)
-				cMgr.Start(addr, pkt)
+				s.Start(addr, pkt)
 			} else if uint16(msg[1]) == OpcodeWrite {
 				pkt := &TFTPReadWritePkt{}
 				pkt.Unpack(msg)
-				cMgr.Start(addr, pkt)
+				s.Start(addr, pkt)
 			} else if uint16(msg[1]) == OpcodeErr {
 				pkt := &TFTPErrPkt{}
 				pkt.Unpack(msg)
