@@ -24,5 +24,7 @@ _testmain.go
 *.prof
 
 #builds
-nitrotftp
+nitro-tftp
+nitro-tftp_.*
 _build/*
+

@@ -98,7 +98,7 @@ func (p *TFTPReadWritePkt) Pack() []byte {
 
 //Unpack loads []byte payload
 func (p *TFTPReadWritePkt) Unpack(data []byte) {
-	p.Opcode = uint16(data[1])
+	p.Opcode = binary.BigEndian.Uint16(data[:2])
 	msgParsed := bytes.Split(data[2:len(data)], []byte{00})
 	p.Filename = string(msgParsed[0])
 	p.Mode = string(msgParsed[1])
@@ -119,7 +119,6 @@ func (p *TFTPDataPkt) Pack() []byte {
 	if err != nil {
 		panic(err)
 	}
-	buff.Write([]byte{0})
 	err = binary.Write(buff, binary.BigEndian, p.Block)
 	if err != nil {
 		panic(err)
@@ -130,8 +129,8 @@ func (p *TFTPDataPkt) Pack() []byte {
 
 //Unpack loads []byte payload
 func (p *TFTPDataPkt) Unpack(data []byte) {
-	p.Opcode = uint16(data[1])
-	p.Block = uint16(data[3])
+	p.Opcode = binary.BigEndian.Uint16(data[:2])
+	p.Block = binary.BigEndian.Uint16(data[2:4])
 	p.Data = data[4:]
 }
 
@@ -158,6 +157,8 @@ func (p *TFTPAckPkt) Pack() []byte {
 
 //Unpack loads []byte payload
 func (p *TFTPAckPkt) Unpack(data []byte) {
+	p.Opcode = binary.BigEndian.Uint16(data[:2])
+	p.Block = binary.BigEndian.Uint16(data[2:4])
 }
 
 //TFTPErrPkt TFTP error Packet
