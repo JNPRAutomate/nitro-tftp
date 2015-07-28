@@ -2,7 +2,6 @@ package main
 
 import (
 	"bufio"
-	"bytes"
 	"encoding/binary"
 	"net"
 	"os"
@@ -74,19 +73,18 @@ func (c *TFTPServer) sendData(tid string) {
 			inputReader := bufio.NewReader(inputFile)
 			for {
 				dLen, err := inputReader.Read(buffer)
-
 				if err != nil {
-					//unable to read from file
-					log.Println(err)
+					if err.Error() != "EOF" {
+						log.Error(err)
+					}
 				}
-				pkt := &TFTPDataPkt{Opcode: OpcodeData, Block: c.Connections[tid].block, Data: bytes.Trim(buffer, "\x00")}
+				pkt := &TFTPDataPkt{Opcode: OpcodeData, Block: c.Connections[tid].block, Data: buffer[:dLen]}
 				r.SetWriteDeadline(time.Now().Add(1 * time.Second))
 				if _, err := r.Write(pkt.Pack()); err != nil {
 					log.Println(err)
 				}
 				c.Connections[tid].BytesSent = c.Connections[tid].BytesSent + len(pkt.Data)
 				buffer = buffer[:cap(buffer)]
-				//TODO: send next packet once block is sent
 				msgLen, _, _, _, err := r.ReadMsgUDP(bb, nil)
 				if err != nil {
 					switch err := err.(type) {
