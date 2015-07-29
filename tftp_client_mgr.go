@@ -33,6 +33,29 @@ func (c *TFTPServer) Start(addr *net.UDPAddr, msg interface{}) {
 	//send error message
 }
 
+//Start starta new TFTP client session
+func (c *TFTPServer) StartOptions(addr *net.UDPAddr, msg interface{}) {
+	log.Printf("%#v", msg)
+	log.Printf("%#v", msg.(*TFTPOptionPkt).Options)
+	//add connection
+	if tftpMsg, ok := msg.(*TFTPReadWritePkt); ok {
+		nc := &TFTPConn{Type: tftpMsg.Opcode, remote: addr, blockSize: DefaultBlockSize, filename: msg.(*TFTPReadWritePkt).Filename}
+		c.Connections[addr.String()] = nc
+		if tftpMsg.Opcode == OpcodeRead {
+			//Setting block to min of 1
+			log.Printf("Sending file %s to client %s", nc.filename, addr.String())
+			c.Connections[addr.String()].block = 1
+			c.sendData(addr.String())
+		} else if tftpMsg.Opcode == OpcodeWrite {
+			//Setting block to min of 0
+			log.Printf("Receiving file %s from client %s", nc.filename, addr.String())
+			c.Connections[addr.String()].block = 0
+			c.recieveData(addr.String())
+		}
+	}
+	//send error message
+}
+
 //ACK handle ack packet
 func (c *TFTPServer) ACK(addr *net.UDPAddr, msg interface{}) {
 	if tftpMsg, ok := msg.(*TFTPAckPkt); ok {

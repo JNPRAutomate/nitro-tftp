@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"net"
 	"os"
 	"strconv"
@@ -142,19 +143,36 @@ func (s *TFTPServer) Listen() chan int {
 			//clear buffer by emptying slice but not reallocating memory
 			bb = bb[:cap(bb)]
 			log.Println("New Connection from", addr.String())
-
+			nullBytes := bytes.Count(msg, []byte{'\x00'})
 			//TODO pull both bytes of message
-			if uint16(msg[1]) == OpcodeRead {
-				pkt := &TFTPReadWritePkt{}
-				pkt.Unpack(msg)
-				s.Start(addr, pkt)
-			} else if uint16(msg[1]) == OpcodeWrite {
-				pkt := &TFTPReadWritePkt{}
-				pkt.Unpack(msg)
-				s.Start(addr, pkt)
-			} else if uint16(msg[1]) == OpcodeErr {
-				pkt := &TFTPErrPkt{}
-				pkt.Unpack(msg)
+			log.Println("Nulls", nullBytes)
+			//Normal TFTP connection
+			if nullBytes == 3 {
+				if uint16(msg[1]) == OpcodeRead {
+					pkt := &TFTPReadWritePkt{}
+					pkt.Unpack(msg)
+					s.Start(addr, pkt)
+				} else if uint16(msg[1]) == OpcodeWrite {
+					pkt := &TFTPReadWritePkt{}
+					pkt.Unpack(msg)
+					s.Start(addr, pkt)
+				} else if uint16(msg[1]) == OpcodeErr {
+					pkt := &TFTPErrPkt{}
+					pkt.Unpack(msg)
+				}
+			} else if nullBytes > 3 {
+				if uint16(msg[1]) == OpcodeRead {
+					pkt := &TFTPOptionPkt{Options: make(map[string]string)}
+					pkt.Unpack(msg)
+					s.StartOptions(addr, pkt)
+				} else if uint16(msg[1]) == OpcodeWrite {
+					pkt := &TFTPOptionPkt{Options: make(map[string]string)}
+					pkt.Unpack(msg)
+					s.StartOptions(addr, pkt)
+				} else if uint16(msg[1]) == OpcodeErr {
+					pkt := &TFTPErrPkt{}
+					pkt.Unpack(msg)
+				}
 			}
 
 		}
