@@ -13,6 +13,7 @@ import (
 var GitHash = ""
 var Version = ""
 var BuildDate = ""
+var AppName = "Nitro TFTP"
 
 var debugFlag bool
 var configFile string

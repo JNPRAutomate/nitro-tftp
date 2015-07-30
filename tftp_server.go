@@ -144,8 +144,6 @@ func (s *TFTPServer) Listen() chan int {
 			bb = bb[:cap(bb)]
 			log.Println("New Connection from", addr.String())
 			nullBytes := bytes.Count(msg, []byte{'\x00'})
-			//TODO pull both bytes of message
-			log.Println("Nulls", nullBytes)
 			//Normal TFTP connection
 			if nullBytes == 3 {
 				if uint16(msg[1]) == OpcodeRead {
@@ -177,5 +175,6 @@ func (s *TFTPServer) Listen() chan int {
 
 		}
 	}()
+	log.Printf("%s now listening on %s for incoming connections", AppName, s.listenAddr.String())
 	return s.ctrlChan
 }
