@@ -41,3 +41,16 @@ Other issues that can lead to slowdown are disk I/O issues on both ends of the c
 
 QoS/CoS Options
 ---------------
+
+Supported RFCs
+--------------
+- [RFC 2348](https://tools.ietf.org/html/rfc2348)
+- [RFC 1350](https://tools.ietf.org/html/rfc1350)
+- [RFC 2347](https://tools.ietf.org/html/rfc2347)
+
+TODO
+=====
+- https://tools.ietf.org/html/rfc7440
+- https://tools.ietf.org/html/rfc2349
+- Better Error Handling (like adding this in general)
+- Create RFC for DSCP/QoS option
