@@ -37,7 +37,12 @@ func (c *TFTPServer) Start(addr *net.UDPAddr, msg interface{}) {
 //Start starta new TFTP client session
 func (c *TFTPServer) StartOptions(addr *net.UDPAddr, msg interface{}) {
 	blksize := DefaultBlockSize
+	windowsize := DefaultWindowSize
+	timeout := DefaultTimeout
+	tsize := DefaultTSize
+
 	log.Printf("%#v", msg.(*TFTPOptionPkt).Options)
+
 	if val, ok := msg.(*TFTPOptionPkt).Options["blksize"]; ok {
 		var err error
 		blksize, err = strconv.Atoi(val)
@@ -48,10 +53,41 @@ func (c *TFTPServer) StartOptions(addr *net.UDPAddr, msg interface{}) {
 			log.Error("Block size out of the valid range")
 		}
 	}
+
+	if val, ok := msg.(*TFTPOptionPkt).Options["windowsize"]; ok {
+		var err error
+		windowsize, err = strconv.Atoi(val)
+		if err != nil {
+			log.Error(err)
+		}
+		if windowsize < MinWindowSize || blksize > MaxWindowSize {
+			log.Error("Window size out of the valid range")
+		}
+	}
+
+	if val, ok := msg.(*TFTPOptionPkt).Options["timeout"]; ok {
+		var err error
+		timeout, err = strconv.Atoi(val)
+		if err != nil {
+			log.Error(err)
+		}
+		if timeout < MinTimeout || timeout > MaxTimeout {
+			log.Error("Timeout out of the valid range")
+		}
+	}
+
+	if val, ok := msg.(*TFTPOptionPkt).Options["tsize"]; ok {
+		var err error
+		tsize, err = strconv.Atoi(val)
+		if err != nil {
+			log.Error(err)
+		}
+	}
+
 	//add connection
 	log.Println(blksize)
 	if tftpMsg, ok := msg.(*TFTPOptionPkt); ok {
-		nc := &TFTPConn{Type: tftpMsg.Opcode, remote: addr, blockSize: blksize, filename: msg.(*TFTPOptionPkt).Filename, Options: tftpMsg.Options}
+		nc := &TFTPConn{Type: tftpMsg.Opcode, remote: addr, timeout: timeout, tsize: tsize, windowSize: windowsize, blockSize: blksize, filename: msg.(*TFTPOptionPkt).Filename, Options: tftpMsg.Options}
 		c.Connections[addr.String()] = nc
 		if tftpMsg.Opcode == OpcodeRead {
 			//Setting block to min of 1
@@ -181,9 +217,21 @@ func (c *TFTPServer) sendData(tid string) {
 							if err.Error() != "EOF" {
 								log.Error(err)
 							}
+							if c.Connections[tid].tsize != 0 {
+								if c.Connections[tid].tsize == c.Connections[tid].BytesSent {
+									log.Printf("Sending file %s to client %s complete, total size %d matching tsize option", c.Connections[tid].filename, tid, c.Connections[tid].BytesSent)
+								} else {
+									log.Errorf("Error sending file %s to client %s, total size %d not matching tsize option %d", c.Connections[tid].filename, tid, c.Connections[tid].BytesSent, c.Connections[tid].tsize)
+									//TODO: SEND ERROR
+									close(dataChan)
+									r.Close()
+									return
+								}
+							} else {
+								log.Printf("Sending file %s to client %s complete, total size %d", c.Connections[tid].filename, tid, c.Connections[tid].BytesSent)
+							}
 							close(dataChan)
 							r.Close()
-							log.Printf("Sending file %s to client %s complete, total size %d", c.Connections[tid].filename, tid, c.Connections[tid].BytesSent)
 							return
 						}
 						pkt := &TFTPDataPkt{Opcode: OpcodeData, Block: c.Connections[tid].block, Data: buffer[:dLen]}
@@ -287,12 +335,15 @@ func (c *TFTPServer) recieveData(tid string) {
 
 //TFTPConn TFTP connection
 type TFTPConn struct {
-	Type      uint16
-	remote    *net.UDPAddr
-	block     uint16
-	blockSize int
-	filename  string
-	BytesSent int
-	BytesRecv int
-	Options   map[string]string
+	Type       uint16
+	remote     *net.UDPAddr
+	block      uint16
+	blockSize  int
+	windowSize int
+	timeout    int
+	tsize      int
+	filename   string
+	BytesSent  int
+	BytesRecv  int
+	Options    map[string]string
 }

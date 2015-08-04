@@ -64,6 +64,24 @@ const (
 	DefaultBlockSize int = 512
 )
 
+const (
+	//DefaultBlockSize the default block size of a connection
+	MinWindowSize     int = 1
+	MaxWindowSize     int = 65535
+	DefaultWindowSize int = 0
+)
+
+const (
+	//DefaultBlockSize the default block size of a connection
+	MinTimeout     int = 1
+	MaxTimeout     int = 255
+	DefaultTimeout int = 0
+)
+
+const (
+	DefaultTSize int = 0
+)
+
 /*
 	RRQ/WRQ packet
 
