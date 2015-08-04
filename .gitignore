@@ -27,4 +27,4 @@ _testmain.go
 nitro-tftp
 nitro-tftp_.*
 _build/*
-
+test/*

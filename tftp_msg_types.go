@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/binary"
+	"log"
 )
 
 /*
@@ -24,6 +25,8 @@ const (
 	OpcodeACK uint16 = 4
 	//OpcodeErr Error (ERROR)
 	OpcodeErr uint16 = 5
+	//OpcodeOptAck Options Acknowledgment
+	OpcodeOptAck uint16 = 6
 )
 
 const (
@@ -56,7 +59,27 @@ const (
 
 const (
 	//DefaultBlockSize the default block size of a connection
+	MinBlockSize     int = 8
+	MaxBlockSize     int = 65464
 	DefaultBlockSize int = 512
+)
+
+const (
+	//DefaultBlockSize the default block size of a connection
+	MinWindowSize     int = 1
+	MaxWindowSize     int = 65535
+	DefaultWindowSize int = 0
+)
+
+const (
+	//DefaultBlockSize the default block size of a connection
+	MinTimeout     int = 1
+	MaxTimeout     int = 255
+	DefaultTimeout int = 0
+)
+
+const (
+	DefaultTSize int = 0
 )
 
 /*
@@ -72,7 +95,7 @@ const (
 //TFTPPacket interface to packet types
 type TFTPPacket interface {
 	Pack() []byte
-	Unpack()
+	Unpack([]byte)
 }
 
 //TFTPReadWritePkt RRQ/WRQ packet
@@ -161,6 +184,45 @@ func (p *TFTPAckPkt) Unpack(data []byte) {
 	p.Block = binary.BigEndian.Uint16(data[2:4])
 }
 
+//TFTPAckPkt TFTP ACK Packet
+type TFTPOptionAckPkt struct {
+	Opcode  uint16
+	Options map[string]string
+}
+
+//Pack returns []byte payload
+func (p *TFTPOptionAckPkt) Pack() []byte {
+	var err error
+	buff := new(bytes.Buffer)
+	err = binary.Write(buff, binary.BigEndian, p.Opcode)
+	if err != nil {
+		panic(err)
+	}
+	for k, v := range p.Options {
+		buff.Write([]byte(k))
+		buff.Write([]byte{0})
+		buff.Write([]byte(v))
+		buff.Write([]byte{0})
+	}
+	return buff.Bytes()
+}
+
+//Unpack loads []byte payload
+func (p *TFTPOptionAckPkt) Unpack(data []byte) {
+	p.Opcode = binary.BigEndian.Uint16(data[:2])
+	msgParsed := bytes.Split(data[2:len(data)], []byte{00})
+	parsedLen := len(msgParsed)
+	log.Println("PL", parsedLen)
+	log.Println(msgParsed)
+	k := 0
+	v := 1
+	for parsedLen > v {
+		p.Options[string(msgParsed[k])] = string(msgParsed[v])
+		k = k + 2
+		v = v + 2
+	}
+}
+
 //TFTPErrPkt TFTP error Packet
 type TFTPErrPkt struct {
 	Opcode  uint16
@@ -191,12 +253,14 @@ func (p *TFTPErrPkt) Unpack(data []byte) {
 
 //TFTPOptionPkt TFTP Option packet
 type TFTPOptionPkt struct {
-	Opcode    uint16
-	OptionAck []byte
-	Value1    []byte
-	OptN      []byte
-	ValueN    []byte
+	Opcode   uint16
+	Filename string
+	Mode     string
+	Options  map[string]string
 }
+
+//TFTPOptionPktMaxSize Maximum Packet Size of an Option Packet
+const TFTPOptionPktMaxSize = 512
 
 //Pack returns []byte payload
 func (p *TFTPOptionPkt) Pack() []byte {
@@ -205,17 +269,36 @@ func (p *TFTPOptionPkt) Pack() []byte {
 	if err != nil {
 		panic(err)
 	}
-	buff.Write(p.OptionAck)
+	buff.Write([]byte(p.Filename))
 	buff.Write([]byte{0})
-	buff.Write(p.Value1)
+	buff.Write([]byte(p.Mode))
 	buff.Write([]byte{0})
-	buff.Write(p.OptN)
-	buff.Write([]byte{0})
-	buff.Write(p.ValueN)
-	buff.Write([]byte{0})
+	//Wrote Options
+	for k, v := range p.Options {
+		buff.Write([]byte(k))
+		buff.Write([]byte{0})
+		buff.Write([]byte(v))
+		buff.Write([]byte{0})
+	}
 	return buff.Bytes()
 }
 
 //Unpack loads []byte payload
-func (p *TFTPOptionPkt) Unpack() {
+func (p *TFTPOptionPkt) Unpack(data []byte) {
+	p.Opcode = binary.BigEndian.Uint16(data[:2])
+	msgParsed := bytes.Split(data[2:len(data)], []byte{00})
+	parsedLen := len(msgParsed)
+	p.Filename = string(msgParsed[0])
+	p.Mode = string(msgParsed[1])
+	log.Println("PL", parsedLen)
+	log.Println(msgParsed)
+	k := 2
+	v := 3
+	if parsedLen > 2 {
+		for parsedLen > v {
+			p.Options[string(msgParsed[k])] = string(msgParsed[v])
+			k = k + 2
+			v = v + 2
+		}
+	}
 }
