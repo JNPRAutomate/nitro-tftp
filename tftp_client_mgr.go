@@ -184,7 +184,7 @@ func (c *TFTPServer) sendData(tid string) {
 						c.clientwg.Done()
 						return
 					}
-					if uint16(msg[1]) == OpcodeACK {
+					if binary.BigEndian.Uint16(msg[:2]) == OpcodeACK {
 						pkt := &TFTPAckPkt{}
 						pkt.Unpack(msg)
 						//Write Data
@@ -258,19 +258,18 @@ func (c *TFTPServer) recieveData(tid string) {
 		} else {
 			c.sendAck(r, tid)
 		}
+
+		msgChan := make(chan []byte)
+		dataChan := make(chan *TFTPDataPkt)
+
+		fileName := strings.Join([]string{c.incomingDir, c.Connections[tid].filename}, "/")
+
+		//listen for message
 		c.clientwg.Add(1)
 		go func() {
-			defer c.clientwg.Done()
 			bb := make([]byte, 1024000)
-			fileName := strings.Join([]string{c.incomingDir, c.Connections[tid].filename}, "/")
-			outputFile, err := os.OpenFile(path.Clean(fileName), os.O_RDWR|os.O_CREATE, 0660)
-			if err != nil {
-				//Unable to open file, send error to client
-				log.Println(err)
-			}
-			outputWriter := bufio.NewWriter(outputFile)
+
 			for {
-				//handle each packet in a seperate go routine
 				msgLen, _, _, _, err := r.ReadMsgUDP(bb, nil)
 				if err != nil {
 					switch err := err.(type) {
@@ -281,54 +280,109 @@ func (c *TFTPServer) recieveData(tid string) {
 							log.Error(err)
 						}
 					}
+					close(msgChan)
+					c.clientwg.Done()
 					return
 				}
 				//pull message from buffer
 				msg := bb[:msgLen]
 				//clear buffer
 				bb = bb[:cap(bb)]
-				opCode := binary.BigEndian.Uint16(msg[:2])
-				if opCode == OpcodeData {
-					pkt := &TFTPDataPkt{}
-					pkt.Unpack(msg)
-					//Write Data
-					ofb, err := outputWriter.Write(pkt.Data)
-					if err != nil {
-						//Unable to write to file
-						log.Println(err)
-					}
-					//add bytes received
-					c.Connections[tid].BytesRecv = c.Connections[tid].BytesRecv + ofb
-					if c.Debug {
-						log.Debug("Wrote %d bytes to file %s", ofb, c.Connections[tid].filename)
-					}
-					c.Connections[tid].block = pkt.Block
-					if len(pkt.Data) < c.Connections[tid].blockSize {
-						//last packet
-						c.sendAck(r, tid)
-						err := r.Close()
-						if err != nil {
-							panic(err)
-						}
-						err = outputWriter.Flush()
-						if err != nil {
-							log.Println(err)
-						}
-						log.Printf("Writing file %s from client %s complete, total size %d", c.Connections[tid].filename, tid, c.Connections[tid].BytesRecv)
+				msgChan <- msg
+			}
+		}()
+
+		//process message
+		c.clientwg.Add(1)
+		go func() {
+			for {
+				select {
+				case msg, open := <-msgChan:
+					if !open {
+						c.clientwg.Done()
 						return
 					}
-					//continue to read data
-					c.sendAck(r, tid)
-					err = outputWriter.Flush()
-					if err != nil {
-						//Unable to write to file
-						log.Println(err)
+					if binary.BigEndian.Uint16(msg[:2]) == OpcodeData {
+						pkt := &TFTPDataPkt{}
+						pkt.Unpack(msg)
+						dataChan <- pkt
+						//Write Data
+					} else if binary.BigEndian.Uint16(msg[:2]) == OpcodeErr {
+						//Handle Errors
+					} else {
+						//TODO: send error
 					}
-				} else {
-					//TODO: send error
 				}
 			}
 		}()
+
+		//recieve packet
+		c.clientwg.Add(1)
+		go func(fileName string) {
+			outputFile, err := os.OpenFile(path.Clean(fileName), os.O_RDWR|os.O_CREATE, 0660)
+			if err != nil {
+				//Unable to open file, send error to client
+				log.Println(err)
+			}
+			defer outputFile.Close()
+			outputWriter := bufio.NewWriter(outputFile)
+
+			for {
+				select {
+				case pkt, open := <-dataChan:
+					if open {
+
+						ofb, err := outputWriter.Write(pkt.Data)
+						if err != nil {
+							//Unable to write to file
+							log.Println(err)
+						}
+						//add bytes received
+						c.Connections[tid].BytesRecv = c.Connections[tid].BytesRecv + ofb
+						if c.Debug {
+							log.Debug("Wrote %d bytes to file %s", ofb, c.Connections[tid].filename)
+						}
+						c.Connections[tid].block = pkt.Block
+						if len(pkt.Data) < c.Connections[tid].blockSize {
+							//last packet
+							c.sendAck(r, tid)
+							err := r.Close()
+							if err != nil {
+								panic(err)
+							}
+							err = outputWriter.Flush()
+							if err != nil {
+								log.Println(err)
+							}
+							if c.Connections[tid].tsize != 0 {
+								if c.Connections[tid].tsize == c.Connections[tid].BytesRecv {
+									log.Printf("Writing file %s from client %s complete, total size %d matching tsize option", c.Connections[tid].filename, tid, c.Connections[tid].BytesRecv)
+								} else {
+									log.Errorf("Error receiving file %s to client %s, total size %d not matching tsize option %d", c.Connections[tid].filename, tid, c.Connections[tid].BytesRecv, c.Connections[tid].tsize)
+									//TODO: SEND ERROR
+									close(dataChan)
+									r.Close()
+									return
+								}
+							} else {
+								log.Printf("Writing file %s from client %s complete, total size %d", c.Connections[tid].filename, tid, c.Connections[tid].BytesRecv)
+							}
+							return
+						}
+						//continue to read data
+						c.sendAck(r, tid)
+						err = outputWriter.Flush()
+						if err != nil {
+							//Unable to write to file
+							log.Errorln(err)
+						}
+					} else {
+						//channel closed
+					}
+				}
+			}
+
+		}(fileName)
 
 	}
 }
