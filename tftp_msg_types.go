@@ -9,7 +9,6 @@ import (
 /*
 	TFTP v2 RFC http://tools.ietf.org/html/rfc1350
 	TFTP Option Extension http://tools.ietf.org/html/rfc2347
-	TODO: TFTP Blocksize Option http://tools.ietf.org/html/rfc2348
 	TODO: TFTP Timeout Interval and Transfer Size Options http://tools.ietf.org/html/rfc2349
 	TODO: TFTP Windowsize Option http://tools.ietf.org/html/rfc7440
 */
@@ -46,6 +45,23 @@ const (
 	ErrorFileAlreadyExists uint16 = 6
 	//ErrorNoSuchUser No such user.
 	ErrorNoSuchUser uint16 = 7
+
+	//ErrorNotDefinedMsg Not defined, see error message (if any).
+	ErrorNotDefinedMsg uint16 = 0
+	//ErrorFileNotFoundMsg File not found.
+	ErrorFileNotFoundMsg string = "File not found"
+	//ErrorAccessViolationMsg Access violation.
+	ErrorAccessViolationMsg string = "Access violation"
+	//ErrorDiskFullMsg Disk full or allocation exceeded.
+	ErrorDiskFullMsg string = "Disk full or allocation exceeded"
+	//ErrorIllegalOpMsg Illegal TFTP operation.
+	ErrorIllegalOpMsg string = "Illegal TFTP operation"
+	//ErrorUnknownIDMsg Unknown transfer ID.
+	ErrorUnknownIDMsg string = "Unknown transfer ID"
+	//ErrorFileAlreadyExistsMsg File already exists.
+	ErrorFileAlreadyExistsMsg string = "File already exists"
+	//ErrorNoSuchUserMsg No such user.
+	ErrorNoSuchUserMsg string = "No such user"
 )
 
 const (
@@ -249,6 +265,9 @@ func (p *TFTPErrPkt) Pack() []byte {
 
 //Unpack loads []byte payload
 func (p *TFTPErrPkt) Unpack(data []byte) {
+	p.Opcode = binary.BigEndian.Uint16(data[:2])
+	p.ErrCode = binary.BigEndian.Uint16(data[2:4])
+	p.ErrMsg = string(bytes.TrimSuffix(data[4:], []byte{00}))
 }
 
 //TFTPOptionPkt TFTP Option packet

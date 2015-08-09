@@ -32,6 +32,7 @@ func (c *TFTPServer) Start(addr *net.UDPAddr, msg interface{}) {
 		}
 	}
 	//send error message
+	c.sendError(addr, ErrorNotDefined, "Invalid request sent")
 }
 
 //Start starta new TFTP client session
@@ -40,8 +41,6 @@ func (c *TFTPServer) StartOptions(addr *net.UDPAddr, msg interface{}) {
 	windowsize := DefaultWindowSize
 	timeout := DefaultTimeout
 	tsize := DefaultTSize
-
-	log.Printf("%#v", msg.(*TFTPOptionPkt).Options)
 
 	if val, ok := msg.(*TFTPOptionPkt).Options["blksize"]; ok {
 		var err error
@@ -85,7 +84,6 @@ func (c *TFTPServer) StartOptions(addr *net.UDPAddr, msg interface{}) {
 	}
 
 	//add connection
-	log.Println(blksize)
 	if tftpMsg, ok := msg.(*TFTPOptionPkt); ok {
 		nc := &TFTPConn{Type: tftpMsg.Opcode, remote: addr, timeout: timeout, tsize: tsize, windowSize: windowsize, blockSize: blksize, filename: msg.(*TFTPOptionPkt).Filename, Options: tftpMsg.Options}
 		c.Connections[addr.String()] = nc
@@ -94,21 +92,17 @@ func (c *TFTPServer) StartOptions(addr *net.UDPAddr, msg interface{}) {
 			log.Printf("Sending file %s to client %s", nc.filename, addr.String())
 			c.Connections[addr.String()].block = 1
 			c.sendData(addr.String())
+			return
 		} else if tftpMsg.Opcode == OpcodeWrite {
 			//Setting block to min of 0
 			log.Printf("Receiving file %s from client %s", nc.filename, addr.String())
 			c.Connections[addr.String()].block = 0
 			c.recieveData(addr.String())
+			return
 		}
 	}
 	//send error message
-}
-
-//ACK handle ack packet
-func (c *TFTPServer) ACK(addr *net.UDPAddr, msg interface{}) {
-	if tftpMsg, ok := msg.(*TFTPAckPkt); ok {
-		log.Printf("%#v", tftpMsg)
-	}
+	c.sendError(addr, ErrorNotDefined, "Invalid request sent")
 }
 
 func (c *TFTPServer) sendAck(conn *net.UDPConn, tid string) {
@@ -127,12 +121,20 @@ func (c *TFTPServer) sendOptAck(conn *net.UDPConn, tid string, opts map[string]s
 	}
 }
 
-func (c *TFTPServer) sendError(opcode int, tid string) {
-
+//sendError send error packet back to client
+func (c *TFTPServer) sendError(conn *net.UDPAddr, errCode uint16, errMsg string) {
+	if r, err := net.DialUDP(ServerNet, nil, conn); err != nil {
+		log.Error(err)
+	} else {
+		pkt := &TFTPErrPkt{Opcode: OpcodeErr, ErrCode: errCode, ErrMsg: errMsg}
+		r.SetWriteDeadline(time.Now().Add(1 * time.Second))
+		if _, err := r.Write(pkt.Pack()); err != nil {
+			log.Println(err)
+		}
+	}
 }
 
 func (c *TFTPServer) sendData(tid string) {
-	//TODO: Implement reverse of recieve data
 	//read from file send to destination, update block
 	if r, err := net.DialUDP(ServerNet, nil, c.Connections[tid].remote); err != nil {
 		log.Println(err)
@@ -191,7 +193,7 @@ func (c *TFTPServer) sendData(tid string) {
 						c.Connections[tid].block = pkt.Block + 1
 						dataChan <- true
 					} else {
-						//TODO: send error
+						c.sendError(c.Connections[tid].remote, ErrorUnknownID, ErrorUnknownIDMsg)
 					}
 				}
 			}
@@ -205,6 +207,11 @@ func (c *TFTPServer) sendData(tid string) {
 			if err != nil {
 				//Unable to open file, send error to client
 				log.Error(err)
+				//TODO: Seperate disk error types
+				c.sendError(c.Connections[tid].remote, ErrorDiskFull, ErrorDiskFullMsg)
+				close(dataChan)
+				r.Close()
+				return
 			}
 			buffer := make([]byte, c.Connections[tid].blockSize)
 
@@ -222,7 +229,7 @@ func (c *TFTPServer) sendData(tid string) {
 									log.Printf("Sending file %s to client %s complete, total size %d matching tsize option", c.Connections[tid].filename, tid, c.Connections[tid].BytesSent)
 								} else {
 									log.Errorf("Error sending file %s to client %s, total size %d not matching tsize option %d", c.Connections[tid].filename, tid, c.Connections[tid].BytesSent, c.Connections[tid].tsize)
-									//TODO: SEND ERROR
+									c.sendError(c.Connections[tid].remote, ErrorUnknownID, "tsize option does not match sent file")
 									close(dataChan)
 									r.Close()
 									return
@@ -251,7 +258,7 @@ func (c *TFTPServer) sendData(tid string) {
 
 func (c *TFTPServer) recieveData(tid string) {
 	if r, err := net.DialUDP(ServerNet, nil, c.Connections[tid].remote); err != nil {
-		log.Println(err)
+		log.Error(err)
 	} else {
 		if len(c.Connections[tid].Options) > 0 {
 			c.sendOptAck(r, tid, c.Connections[tid].Options)
@@ -310,7 +317,7 @@ func (c *TFTPServer) recieveData(tid string) {
 					} else if binary.BigEndian.Uint16(msg[:2]) == OpcodeErr {
 						//Handle Errors
 					} else {
-						//TODO: send error
+						c.sendError(c.Connections[tid].remote, ErrorUnknownID, ErrorUnknownIDMsg)
 					}
 				}
 			}
@@ -322,7 +329,12 @@ func (c *TFTPServer) recieveData(tid string) {
 			outputFile, err := os.OpenFile(path.Clean(fileName), os.O_RDWR|os.O_CREATE, 0660)
 			if err != nil {
 				//Unable to open file, send error to client
-				log.Println(err)
+				//TODO: Seperate disk error types
+				log.Error(err)
+				c.sendError(c.Connections[tid].remote, ErrorDiskFull, ErrorDiskFullMsg)
+				close(dataChan)
+				r.Close()
+				return
 			}
 			defer outputFile.Close()
 			outputWriter := bufio.NewWriter(outputFile)
@@ -359,7 +371,7 @@ func (c *TFTPServer) recieveData(tid string) {
 									log.Printf("Writing file %s from client %s complete, total size %d matching tsize option", c.Connections[tid].filename, tid, c.Connections[tid].BytesRecv)
 								} else {
 									log.Errorf("Error receiving file %s to client %s, total size %d not matching tsize option %d", c.Connections[tid].filename, tid, c.Connections[tid].BytesRecv, c.Connections[tid].tsize)
-									//TODO: SEND ERROR
+									c.sendError(c.Connections[tid].remote, ErrorUnknownID, "tsize option does not match sent recieved")
 									close(dataChan)
 									r.Close()
 									return
@@ -374,7 +386,11 @@ func (c *TFTPServer) recieveData(tid string) {
 						err = outputWriter.Flush()
 						if err != nil {
 							//Unable to write to file
+							//TODO: Seperate disk error types
 							log.Errorln(err)
+							c.sendError(c.Connections[tid].remote, ErrorDiskFull, ErrorDiskFullMsg)
+							close(dataChan)
+							r.Close()
 						}
 					} else {
 						//channel closed
@@ -385,19 +401,4 @@ func (c *TFTPServer) recieveData(tid string) {
 		}(fileName)
 
 	}
-}
-
-//TFTPConn TFTP connection
-type TFTPConn struct {
-	Type       uint16
-	remote     *net.UDPAddr
-	block      uint16
-	blockSize  int
-	windowSize int
-	timeout    int
-	tsize      int
-	filename   string
-	BytesSent  int
-	BytesRecv  int
-	Options    map[string]string
 }
