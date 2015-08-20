@@ -109,7 +109,7 @@ func (c *TFTPServer) sendAck(conn *net.UDPConn, tid string) {
 	pkt := &TFTPAckPkt{Opcode: OpcodeACK, Block: c.Connections[tid].block}
 	conn.SetWriteDeadline(time.Now().Add(1 * time.Second))
 	if _, err := conn.Write(pkt.Pack()); err != nil {
-		log.Println(err)
+		log.Errorln(err)
 	}
 }
 
@@ -117,7 +117,7 @@ func (c *TFTPServer) sendOptAck(conn *net.UDPConn, tid string, opts map[string]s
 	pkt := &TFTPOptionAckPkt{Opcode: OpcodeOptAck, Options: opts}
 	conn.SetWriteDeadline(time.Now().Add(1 * time.Second))
 	if _, err := conn.Write(pkt.Pack()); err != nil {
-		log.Println(err)
+		log.Errorln(err)
 	}
 }
 
@@ -129,7 +129,7 @@ func (c *TFTPServer) sendError(conn *net.UDPAddr, errCode uint16, errMsg string)
 		pkt := &TFTPErrPkt{Opcode: OpcodeErr, ErrCode: errCode, ErrMsg: errMsg}
 		r.SetWriteDeadline(time.Now().Add(1 * time.Second))
 		if _, err := r.Write(pkt.Pack()); err != nil {
-			log.Println(err)
+			log.Errorln(err)
 		}
 	}
 }
@@ -137,7 +137,7 @@ func (c *TFTPServer) sendError(conn *net.UDPAddr, errCode uint16, errMsg string)
 func (c *TFTPServer) sendData(tid string) {
 	//read from file send to destination, update block
 	if r, err := net.DialUDP(ServerNet, nil, c.Connections[tid].remote); err != nil {
-		log.Println(err)
+		log.Errorln(err)
 	} else {
 		if len(c.Connections[tid].Options) > 0 {
 			c.sendOptAck(r, tid, c.Connections[tid].Options)
@@ -383,15 +383,6 @@ func (c *TFTPServer) recieveData(tid string) {
 						}
 						//continue to read data
 						c.sendAck(r, tid)
-						err = outputWriter.Flush()
-						if err != nil {
-							//Unable to write to file
-							//TODO: Seperate disk error types
-							log.Errorln(err)
-							c.sendError(c.Connections[tid].remote, ErrorDiskFull, ErrorDiskFullMsg)
-							close(dataChan)
-							r.Close()
-						}
 					} else {
 						//channel closed
 					}

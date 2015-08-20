@@ -3,7 +3,6 @@ package main
 import (
 	"bytes"
 	"encoding/binary"
-	"log"
 )
 
 /*
@@ -228,8 +227,6 @@ func (p *TFTPOptionAckPkt) Unpack(data []byte) {
 	p.Opcode = binary.BigEndian.Uint16(data[:2])
 	msgParsed := bytes.Split(data[2:len(data)], []byte{00})
 	parsedLen := len(msgParsed)
-	log.Println("PL", parsedLen)
-	log.Println(msgParsed)
 	k := 0
 	v := 1
 	for parsedLen > v {
@@ -309,8 +306,6 @@ func (p *TFTPOptionPkt) Unpack(data []byte) {
 	parsedLen := len(msgParsed)
 	p.Filename = string(msgParsed[0])
 	p.Mode = string(msgParsed[1])
-	log.Println("PL", parsedLen)
-	log.Println(msgParsed)
 	k := 2
 	v := 3
 	if parsedLen > 2 {
