@@ -30,6 +30,7 @@ func (c *TFTPServer) Start(addr *net.UDPAddr, msg interface{}) {
 			c.Connections[addr.String()].block = 0
 			c.recieveData(addr.String())
 		}
+		return
 	}
 	//send error message
 	c.sendError(addr, ErrorNotDefined, "Invalid request sent")
@@ -111,6 +112,7 @@ func (c *TFTPServer) sendAck(conn *net.UDPConn, tid string) {
 	if _, err := conn.Write(pkt.Pack()); err != nil {
 		log.Errorln(err)
 	}
+	c.Connections[tid].ACKSent()
 }
 
 func (c *TFTPServer) sendOptAck(conn *net.UDPConn, tid string, opts map[string]string) {
@@ -119,6 +121,7 @@ func (c *TFTPServer) sendOptAck(conn *net.UDPConn, tid string, opts map[string]s
 	if _, err := conn.Write(pkt.Pack()); err != nil {
 		log.Errorln(err)
 	}
+	c.Connections[tid].OptACKSent()
 }
 
 //sendError send error packet back to client
@@ -132,6 +135,7 @@ func (c *TFTPServer) sendError(conn *net.UDPAddr, errCode uint16, errMsg string)
 			log.Errorln(err)
 		}
 	}
+	//TODO: Count sending an error packet
 }
 
 func (c *TFTPServer) sendData(tid string) {
@@ -230,9 +234,6 @@ func (c *TFTPServer) sendData(tid string) {
 								} else {
 									log.Errorf("Error sending file %s to client %s, total size %d not matching tsize option %d", c.Connections[tid].filename, tid, c.Connections[tid].BytesSent, c.Connections[tid].tsize)
 									c.sendError(c.Connections[tid].remote, ErrorUnknownID, "tsize option does not match sent file")
-									close(dataChan)
-									r.Close()
-									return
 								}
 							} else {
 								log.Printf("Sending file %s to client %s complete, total size %d", c.Connections[tid].filename, tid, c.Connections[tid].BytesSent)
@@ -246,7 +247,7 @@ func (c *TFTPServer) sendData(tid string) {
 						if _, err := r.Write(pkt.Pack()); err != nil {
 							log.Println(err)
 						}
-						c.Connections[tid].BytesSent = c.Connections[tid].BytesSent + len(pkt.Data)
+						c.Connections[tid].DataSent(len(pkt.Data))
 						buffer = buffer[:cap(buffer)]
 					}
 				}
@@ -343,14 +344,13 @@ func (c *TFTPServer) recieveData(tid string) {
 				select {
 				case pkt, open := <-dataChan:
 					if open {
-
 						ofb, err := outputWriter.Write(pkt.Data)
 						if err != nil {
 							//Unable to write to file
 							log.Println(err)
 						}
 						//add bytes received
-						c.Connections[tid].BytesRecv = c.Connections[tid].BytesRecv + ofb
+						c.Connections[tid].DataRecv(ofb)
 						if c.Debug {
 							log.Debug("Wrote %d bytes to file %s", ofb, c.Connections[tid].filename)
 						}

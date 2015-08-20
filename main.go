@@ -3,14 +3,12 @@ package main
 import (
 	"flag"
 	"fmt"
-	"net/http"
 	_ "net/http/pprof"
 	"os"
 	"os/signal"
 	"runtime/pprof"
 
 	log "github.com/Sirupsen/logrus"
-	"github.com/wblakecaldwell/profiler"
 )
 
 //Version info
@@ -29,15 +27,15 @@ func init() {
 	flag.StringVar(&configFile, "config", "", "Configuration file")
 	flag.BoolVar(&debugFlag, "debug", false, "Enable debug logging")
 	flag.BoolVar(&versionFlag, "version", false, "Display Version")
-	flag.StringVar(&cpuprofile, "cpuprofile", "", "write cpu profile to file")
-	flag.StringVar(&memprofile, "memprofile", "", "write memory profile to file")
+	//flag.StringVar(&cpuprofile, "cpuprofile", "", "write cpu profile to file")
+	//flag.StringVar(&memprofile, "memprofile", "", "write memory profile to file")
 }
 
 func main() {
 	flag.Parse()
 
 	// add handlers to help us track memory usage - they don't track memory until they're told to
-	profiler.AddMemoryProfilingHandlers()
+	//profiler.AddMemoryProfilingHandlers()
 
 	// Uncomment if you want to start profiling automatically
 	// profiler.StartProfiling()
@@ -62,7 +60,7 @@ func main() {
 	}
 
 	// listen on port 6060 (pick a port)
-	go http.ListenAndServe(":6060", nil)
+	//go http.ListenAndServe(":6060", nil)
 
 	if versionFlag {
 		fmt.Printf("Built: %s\nVersion: %s\nGit Commit: %s\n", BuildDate, Version, GitHash)
