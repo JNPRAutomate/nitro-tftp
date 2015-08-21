@@ -59,6 +59,10 @@ func main() {
 		defer f.Close()
 	}
 
+	if debugFlag {
+		log.SetLevel(log.DebugLevel)
+	}
+
 	// listen on port 6060 (pick a port)
 	//go http.ListenAndServe(":6060", nil)
 
@@ -67,8 +71,7 @@ func main() {
 		return
 	}
 
-	s := &TFTPServer{}
-	s.Debug = debugFlag
+	s := &TFTPServer{Debug: debugFlag}
 	s.LoadConfig(&Config{})
 	ctrlChan := s.Listen()
 

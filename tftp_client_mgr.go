@@ -288,6 +288,7 @@ func (c *TFTPServer) recieveData(tid string) {
 							log.Error(err)
 						}
 					}
+					log.Debugf("Closing msgChan for client %s", tid)
 					close(msgChan)
 					c.clientwg.Done()
 					return
@@ -307,6 +308,7 @@ func (c *TFTPServer) recieveData(tid string) {
 				select {
 				case msg, open := <-msgChan:
 					if !open {
+						log.Debugf("Packet parser closed for client %s", tid)
 						c.clientwg.Done()
 						return
 					}
@@ -314,10 +316,11 @@ func (c *TFTPServer) recieveData(tid string) {
 						pkt := &TFTPDataPkt{}
 						pkt.Unpack(msg)
 						dataChan <- pkt
-						//Write Data
 					} else if binary.BigEndian.Uint16(msg[:2]) == OpcodeErr {
 						//Handle Errors
+						log.Error("Received Error!")
 					} else {
+						log.Error("Sent Error!")
 						c.sendError(c.Connections[tid].remote, ErrorUnknownID, ErrorUnknownIDMsg)
 					}
 				}
@@ -347,24 +350,23 @@ func (c *TFTPServer) recieveData(tid string) {
 						ofb, err := outputWriter.Write(pkt.Data)
 						if err != nil {
 							//Unable to write to file
-							log.Println(err)
+							log.Errorln(err)
 						}
 						//add bytes received
 						c.Connections[tid].DataRecv(ofb)
-						if c.Debug {
-							log.Debug("Wrote %d bytes to file %s", ofb, c.Connections[tid].filename)
-						}
+						//log.Debugf("Wrote %d bytes to file %s", ofb, c.Connections[tid].filename)
+
 						c.Connections[tid].block = pkt.Block
 						if len(pkt.Data) < c.Connections[tid].blockSize {
 							//last packet
 							c.sendAck(r, tid)
 							err := r.Close()
 							if err != nil {
-								panic(err)
+								log.Errorln(err)
 							}
 							err = outputWriter.Flush()
 							if err != nil {
-								log.Println(err)
+								log.Errorln(err)
 							}
 							if c.Connections[tid].tsize != 0 {
 								if c.Connections[tid].tsize == c.Connections[tid].BytesRecv {
@@ -372,13 +374,12 @@ func (c *TFTPServer) recieveData(tid string) {
 								} else {
 									log.Errorf("Error receiving file %s to client %s, total size %d not matching tsize option %d", c.Connections[tid].filename, tid, c.Connections[tid].BytesRecv, c.Connections[tid].tsize)
 									c.sendError(c.Connections[tid].remote, ErrorUnknownID, "tsize option does not match sent recieved")
-									close(dataChan)
-									r.Close()
-									return
 								}
 							} else {
 								log.Printf("Writing file %s from client %s complete, total size %d", c.Connections[tid].filename, tid, c.Connections[tid].BytesRecv)
 							}
+							close(dataChan)
+							log.Debugf("Closing data channel for client %s", tid)
 							return
 						}
 						//continue to read data
