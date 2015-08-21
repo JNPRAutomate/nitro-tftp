@@ -4,11 +4,11 @@ TAG_CMD := git log -n1 --pretty="format:%d" | sed "s/, /\n/g" | grep tag: | sed 
 VERSION=$(shell $(TAG_CMD))
 
 build:
-	go build -ldflags="-X main.GitHash $(GIT_HASH) -X main.BuildDate $(DATE_TAG) -X main.Version $(VERSION)"
+	go build -ldflags="-X=main.GitHash=$(GIT_HASH) -X=main.BuildDate=$(DATE_TAG) -X=main.Version=$(VERSION)"
 	mv nitro-tftp test/
 
 all:
-	gox -ldflags="-X main.GitHash $(GIT_HASH) -X main.BuildDate $(DATE_TAG) -X main.Version $(VERSION)"
+	gox -ldflags="-X=main.GitHash=$(GIT_HASH) -X=main.BuildDate=$(DATE_TAG) -X=main.Version=$(VERSION)"
 
 release: all
 	@echo "Release"

@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/binary"
 	"net"
 	"os"
 	"strconv"
@@ -144,30 +145,34 @@ func (s *TFTPServer) Listen() chan int {
 			bb = bb[:cap(bb)]
 			log.Println("New Connection from", addr.String())
 			nullBytes := bytes.Count(msg, []byte{'\x00'})
+
+			//TODO: This could be a security issue as a packet could be sent with a bunch of nulls
+
 			//Normal TFTP connection
 			if nullBytes == 3 {
-				if uint16(msg[1]) == OpcodeRead {
+				if binary.BigEndian.Uint16(msg[:2]) == OpcodeRead {
 					pkt := &TFTPReadWritePkt{}
 					pkt.Unpack(msg)
 					s.Start(addr, pkt)
-				} else if uint16(msg[1]) == OpcodeWrite {
+				} else if binary.BigEndian.Uint16(msg[:2]) == OpcodeWrite {
 					pkt := &TFTPReadWritePkt{}
 					pkt.Unpack(msg)
 					s.Start(addr, pkt)
-				} else if uint16(msg[1]) == OpcodeErr {
+				} else if binary.BigEndian.Uint16(msg[:2]) == OpcodeErr {
 					pkt := &TFTPErrPkt{}
 					pkt.Unpack(msg)
 				}
+				//Option packet sent
 			} else if nullBytes > 3 {
-				if uint16(msg[1]) == OpcodeRead {
+				if binary.BigEndian.Uint16(msg[:2]) == OpcodeRead {
 					pkt := &TFTPOptionPkt{Options: make(map[string]string)}
 					pkt.Unpack(msg)
 					s.StartOptions(addr, pkt)
-				} else if uint16(msg[1]) == OpcodeWrite {
+				} else if binary.BigEndian.Uint16(msg[:2]) == OpcodeWrite {
 					pkt := &TFTPOptionPkt{Options: make(map[string]string)}
 					pkt.Unpack(msg)
 					s.StartOptions(addr, pkt)
-				} else if uint16(msg[1]) == OpcodeErr {
+				} else if binary.BigEndian.Uint16(msg[:2]) == OpcodeErr {
 					pkt := &TFTPErrPkt{}
 					pkt.Unpack(msg)
 				}
