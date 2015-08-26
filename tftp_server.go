@@ -10,6 +10,7 @@ import (
 	"sync"
 
 	log "github.com/Sirupsen/logrus"
+	"github.com/robwc/tftp"
 )
 
 const (
@@ -150,30 +151,30 @@ func (s *TFTPServer) Listen() chan int {
 
 			//Normal TFTP connection
 			if nullBytes == 3 {
-				if binary.BigEndian.Uint16(msg[:2]) == OpcodeRead {
-					pkt := &TFTPReadWritePkt{}
+				if binary.BigEndian.Uint16(msg[:2]) == tftp.OpcodeRead {
+					pkt := &tftp.TFTPReadWritePkt{}
 					pkt.Unpack(msg)
 					s.Start(addr, pkt)
-				} else if binary.BigEndian.Uint16(msg[:2]) == OpcodeWrite {
-					pkt := &TFTPReadWritePkt{}
+				} else if binary.BigEndian.Uint16(msg[:2]) == tftp.OpcodeWrite {
+					pkt := &tftp.TFTPReadWritePkt{}
 					pkt.Unpack(msg)
 					s.Start(addr, pkt)
-				} else if binary.BigEndian.Uint16(msg[:2]) == OpcodeErr {
-					pkt := &TFTPErrPkt{}
+				} else if binary.BigEndian.Uint16(msg[:2]) == tftp.OpcodeErr {
+					pkt := &tftp.TFTPErrPkt{}
 					pkt.Unpack(msg)
 				}
 				//Option packet sent
 			} else if nullBytes > 3 {
-				if binary.BigEndian.Uint16(msg[:2]) == OpcodeRead {
-					pkt := &TFTPOptionPkt{Options: make(map[string]string)}
+				if binary.BigEndian.Uint16(msg[:2]) == tftp.OpcodeRead {
+					pkt := &tftp.TFTPOptionPkt{Options: make(map[string]string)}
 					pkt.Unpack(msg)
 					s.StartOptions(addr, pkt)
-				} else if binary.BigEndian.Uint16(msg[:2]) == OpcodeWrite {
-					pkt := &TFTPOptionPkt{Options: make(map[string]string)}
+				} else if binary.BigEndian.Uint16(msg[:2]) == tftp.OpcodeWrite {
+					pkt := &tftp.TFTPOptionPkt{Options: make(map[string]string)}
 					pkt.Unpack(msg)
 					s.StartOptions(addr, pkt)
-				} else if binary.BigEndian.Uint16(msg[:2]) == OpcodeErr {
-					pkt := &TFTPErrPkt{}
+				} else if binary.BigEndian.Uint16(msg[:2]) == tftp.OpcodeErr {
+					pkt := &tftp.TFTPErrPkt{}
 					pkt.Unpack(msg)
 				}
 			}
