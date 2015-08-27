@@ -20,22 +20,27 @@ const (
 	DefaultPort = 69
 	//DefaultIP default IP to listen on
 	DefaultIP = "0.0.0.0"
+	//DefaultStats enable stats collection by default
+	DefaultStats = true
 )
 
 //TFTPServer A server to listen for UDP messages
 type TFTPServer struct {
-	ctrlChan    chan int
-	listenAddr  *net.UDPAddr
-	sock        *net.UDPConn
-	incomingDir string
-	outgoingDir string
-	protocol    string
-	wg          sync.WaitGroup
-	Connections map[string]*TFTPConn
-	clientwg    sync.WaitGroup
-	Debug       bool
+	ctrlChan    chan int             //ctrlChan control channel for managing the server
+	listenAddr  *net.UDPAddr         //listenAddr the address to listen on
+	sock        *net.UDPConn         //sock UDP connection socket
+	incomingDir string               //incomingDir incoming directory for files
+	outgoingDir string               //outgoingDir outgoingDir for files
+	protocol    string               //protocol protocol to listen on: udp, udp4, or udp6
+	wg          sync.WaitGroup       //wg wait group for syncing data
+	Connections map[string]*TFTPConn //Connections active TFTP connection
+	clientwg    sync.WaitGroup       //clientwg wait group to manage client connection
+	Debug       bool                 //Debug enable debuging
+	StatsMgr    StatsMgr             //StatsMgr stats collection manager
+	Stats       bool                 //Stats enable or disable stats collection
 }
 
+//LoadConfig load a config from disk
 func (s *TFTPServer) LoadConfig(c *Config) error {
 	var err error
 	if c.IncomingDir == "" && c.OutgoingDir == "" {

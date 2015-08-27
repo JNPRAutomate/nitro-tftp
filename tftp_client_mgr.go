@@ -19,6 +19,7 @@ func (c *TFTPServer) Start(addr *net.UDPAddr, msg interface{}) {
 	//add connection
 	if tftpMsg, ok := msg.(*tftp.TFTPReadWritePkt); ok {
 		nc := &TFTPConn{Type: tftpMsg.Opcode, remote: addr, blockSize: tftp.DefaultBlockSize, filename: msg.(*tftp.TFTPReadWritePkt).Filename}
+		nc.StartTime = time.Now()
 		c.Connections[addr.String()] = nc
 		if tftpMsg.Opcode == tftp.OpcodeRead {
 			//Setting block to min of 1
@@ -37,7 +38,7 @@ func (c *TFTPServer) Start(addr *net.UDPAddr, msg interface{}) {
 	c.sendError(addr, tftp.ErrorNotDefined, "Invalid request sent")
 }
 
-//Start starta new TFTP client session
+//StartOptions starts a new TFTP client session with options
 func (c *TFTPServer) StartOptions(addr *net.UDPAddr, msg interface{}) {
 	blksize := tftp.DefaultBlockSize
 	windowsize := tftp.DefaultWindowSize
@@ -107,6 +108,14 @@ func (c *TFTPServer) StartOptions(addr *net.UDPAddr, msg interface{}) {
 	c.sendError(addr, tftp.ErrorNotDefined, "Invalid request sent")
 }
 
+//StopConn Stop an existing TFTP connection
+func (c *TFTPServer) StopConn(tid string) {
+	if c.Stats {
+		c.StatsMgr.UpdateClientStats(c.Connections[tid])
+	}
+	delete(c.Connections, tid)
+}
+
 func (c *TFTPServer) sendAck(conn *net.UDPConn, tid string) {
 	pkt := &tftp.TFTPAckPkt{Opcode: tftp.OpcodeACK, Block: c.Connections[tid].block}
 	conn.SetWriteDeadline(time.Now().Add(1 * time.Second))
@@ -137,6 +146,7 @@ func (c *TFTPServer) sendError(conn *net.UDPAddr, errCode uint16, errMsg string)
 		}
 	}
 	//TODO: Count sending an error packet
+	c.Connections[strings.Join([]string{conn.IP.String(), string(conn.Port)}, ":")].ErrorSent()
 }
 
 func (c *TFTPServer) sendData(tid string) {
