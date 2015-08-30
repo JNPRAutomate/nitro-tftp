@@ -25,8 +25,11 @@ var memprofile string
 
 func init() {
 	flag.StringVar(&configFile, "config", "", "Configuration file")
+	flag.StringVar(&configFile, "c", "", "Configuration file")
 	flag.BoolVar(&debugFlag, "debug", false, "Enable debug logging")
+	flag.BoolVar(&debugFlag, "d", false, "Enable debug logging")
 	flag.BoolVar(&versionFlag, "version", false, "Display Version")
+	flag.BoolVar(&versionFlag, "v", false, "Display Version")
 	//flag.StringVar(&cpuprofile, "cpuprofile", "", "write cpu profile to file")
 	//flag.StringVar(&memprofile, "memprofile", "", "write memory profile to file")
 }
@@ -72,13 +75,24 @@ func main() {
 	}
 
 	s := &TFTPServer{Debug: debugFlag}
-	s.LoadConfig(&Config{})
+
+	cfg := &Config{}
+
+	if configFile != "" {
+		err := cfg.Open(configFile)
+		if err != nil {
+			log.Error(err)
+			os.Exit(1)
+		}
+	}
+
+	s.LoadConfig(cfg)
 	ctrlChan := s.Listen()
 
-	c := make(chan os.Signal, 1)
-	signal.Notify(c, os.Interrupt, os.Kill)
-	sig := <-c
-	close(c)
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, os.Interrupt, os.Kill)
+	sig := <-sigChan
+	close(sigChan)
 	close(ctrlChan)
 	log.Println("Caught Signal", sig)
 }
