@@ -19,6 +19,7 @@ func (c *TFTPServer) Start(addr *net.UDPAddr, msg interface{}) {
 	//add connection
 	if tftpMsg, ok := msg.(*tftp.TFTPReadWritePkt); ok {
 		nc := &TFTPConn{Type: tftpMsg.Opcode, remote: addr, blockSize: tftp.DefaultBlockSize, filename: msg.(*tftp.TFTPReadWritePkt).Filename}
+		nc.StartTime = time.Now()
 		c.Connections[addr.String()] = nc
 		if tftpMsg.Opcode == tftp.OpcodeRead {
 			//Setting block to min of 1
@@ -37,7 +38,7 @@ func (c *TFTPServer) Start(addr *net.UDPAddr, msg interface{}) {
 	c.sendError(addr, tftp.ErrorNotDefined, "Invalid request sent")
 }
 
-//Start starta new TFTP client session
+//StartOptions starts a new TFTP client session with options
 func (c *TFTPServer) StartOptions(addr *net.UDPAddr, msg interface{}) {
 	blksize := tftp.DefaultBlockSize
 	windowsize := tftp.DefaultWindowSize
@@ -107,6 +108,14 @@ func (c *TFTPServer) StartOptions(addr *net.UDPAddr, msg interface{}) {
 	c.sendError(addr, tftp.ErrorNotDefined, "Invalid request sent")
 }
 
+//StopConn Stop an existing TFTP connection
+func (c *TFTPServer) StopConn(tid string) {
+	if c.Stats {
+		c.StatsMgr.UpdateClientStats(c.Connections[tid])
+	}
+	delete(c.Connections, tid)
+}
+
 func (c *TFTPServer) sendAck(conn *net.UDPConn, tid string) {
 	pkt := &tftp.TFTPAckPkt{Opcode: tftp.OpcodeACK, Block: c.Connections[tid].block}
 	conn.SetWriteDeadline(time.Now().Add(1 * time.Second))
@@ -136,7 +145,7 @@ func (c *TFTPServer) sendError(conn *net.UDPAddr, errCode uint16, errMsg string)
 			log.Errorln(err)
 		}
 	}
-	//TODO: Count sending an error packet
+	c.Connections[strings.Join([]string{conn.IP.String(), strconv.Itoa(conn.Port)}, ":")].ErrorSent()
 }
 
 func (c *TFTPServer) sendData(tid string) {
@@ -148,10 +157,21 @@ func (c *TFTPServer) sendData(tid string) {
 			c.sendOptAck(r, tid, c.Connections[tid].Options)
 		}
 
+		fileName := strings.Join([]string{c.outgoingDir, c.Connections[tid].filename}, "/")
+
+		inputFile, err := os.OpenFile(path.Clean(fileName), os.O_RDONLY, 0660)
+		if err != nil {
+			//Unable to open file, send error to client
+			log.Error(err)
+			//TODO: Seperate disk error types
+			c.sendError(c.Connections[tid].remote, tftp.ErrorDiskFull, tftp.ErrorDiskFullMsg)
+			r.Close()
+			c.StopConn(tid)
+			return
+		}
+
 		msgChan := make(chan []byte)
 		dataChan := make(chan bool)
-
-		fileName := strings.Join([]string{c.outgoingDir, c.Connections[tid].filename}, "/")
 
 		//listen for message
 		c.clientwg.Add(1)
@@ -181,48 +201,20 @@ func (c *TFTPServer) sendData(tid string) {
 			}
 		}()
 
-		//process message
-		c.clientwg.Add(1)
-		go func() {
-			for {
-				select {
-				case msg, open := <-msgChan:
-					if !open {
-						c.clientwg.Done()
-						return
-					}
-					if binary.BigEndian.Uint16(msg[:2]) == tftp.OpcodeACK {
-						pkt := &tftp.TFTPAckPkt{}
-						pkt.Unpack(msg)
-						//Write Data
-						c.Connections[tid].block = pkt.Block + 1
-						dataChan <- true
-					} else {
-						c.sendError(c.Connections[tid].remote, tftp.ErrorUnknownID, tftp.ErrorUnknownIDMsg)
-					}
-				}
-			}
-		}()
-
 		//send packet
 		c.clientwg.Add(1)
-		go func(fileName string) {
-			inputFile, err := os.OpenFile(path.Clean(fileName), os.O_RDWR|os.O_CREATE, 0660)
-			defer inputFile.Close()
-			if err != nil {
-				//Unable to open file, send error to client
-				log.Error(err)
-				//TODO: Seperate disk error types
-				c.sendError(c.Connections[tid].remote, tftp.ErrorDiskFull, tftp.ErrorDiskFullMsg)
-				close(dataChan)
-				r.Close()
-				return
-			}
+		go func(inputFile *os.File) {
+
 			buffer := make([]byte, c.Connections[tid].blockSize)
 
 			for {
 				select {
-				case send := <-dataChan:
+				case send, open := <-dataChan:
+					if !open {
+						close(dataChan)
+						r.Close()
+						c.StopConn(tid)
+					}
 					if send {
 						dLen, err := inputFile.Read(buffer)
 						if err != nil {
@@ -241,6 +233,8 @@ func (c *TFTPServer) sendData(tid string) {
 							}
 							close(dataChan)
 							r.Close()
+							c.StopConn(tid)
+							inputFile.Close()
 							return
 						}
 						pkt := &tftp.TFTPDataPkt{Opcode: tftp.OpcodeData, Block: c.Connections[tid].block, Data: buffer[:dLen]}
@@ -254,7 +248,38 @@ func (c *TFTPServer) sendData(tid string) {
 				}
 			}
 
-		}(fileName)
+		}(inputFile)
+
+		//process message
+		c.clientwg.Add(1)
+		go func() {
+			//send inital packet
+			dataChan <- true
+
+			for {
+				select {
+				case msg, open := <-msgChan:
+					if !open {
+						c.clientwg.Done()
+						return
+					}
+					if binary.BigEndian.Uint16(msg[:2]) == tftp.OpcodeACK {
+						pkt := &tftp.TFTPAckPkt{}
+						pkt.Unpack(msg)
+						//Write Data
+						if c.Connections[tid].block == 65535 {
+							c.Connections[tid].block = pkt.Block + 2
+						} else {
+							c.Connections[tid].block = pkt.Block + 1
+						}
+
+						dataChan <- true
+					} else {
+						c.sendError(c.Connections[tid].remote, tftp.ErrorUnknownID, tftp.ErrorUnknownIDMsg)
+					}
+				}
+			}
+		}()
 	}
 }
 
@@ -331,7 +356,7 @@ func (c *TFTPServer) recieveData(tid string) {
 		//recieve packet
 		c.clientwg.Add(1)
 		go func(fileName string) {
-			outputFile, err := os.OpenFile(path.Clean(fileName), os.O_RDWR|os.O_CREATE, 0660)
+			outputFile, err := os.OpenFile(path.Clean(fileName), os.O_WRONLY|os.O_CREATE, 0660)
 			if err != nil {
 				//Unable to open file, send error to client
 				//TODO: Seperate disk error types
@@ -381,13 +406,16 @@ func (c *TFTPServer) recieveData(tid string) {
 							}
 							close(dataChan)
 							log.Debugf("Closing data channel for client %s", tid)
+							c.StopConn(tid)
 							return
 						}
 						//continue to read data
 						c.sendAck(r, tid)
-					} else {
-						//channel closed
 					}
+					close(dataChan)
+					log.Debugf("Closing data channel for client %s", tid)
+					c.StopConn(tid)
+					return
 				}
 			}
 

@@ -20,22 +20,27 @@ const (
 	DefaultPort = 69
 	//DefaultIP default IP to listen on
 	DefaultIP = "0.0.0.0"
+	//DefaultStats enable stats collection by default
+	DefaultStats = true
 )
 
 //TFTPServer A server to listen for UDP messages
 type TFTPServer struct {
-	ctrlChan    chan int
-	listenAddr  *net.UDPAddr
-	sock        *net.UDPConn
-	incomingDir string
-	outgoingDir string
-	protocol    string
-	wg          sync.WaitGroup
-	Connections map[string]*TFTPConn
-	clientwg    sync.WaitGroup
-	Debug       bool
+	ctrlChan    chan int             //ctrlChan control channel for managing the server
+	listenAddr  *net.UDPAddr         //listenAddr the address to listen on
+	sock        *net.UDPConn         //sock UDP connection socket
+	incomingDir string               //incomingDir incoming directory for files
+	outgoingDir string               //outgoingDir outgoingDir for files
+	protocol    string               //protocol protocol to listen on: udp, udp4, or udp6
+	wg          sync.WaitGroup       //wg wait group for syncing data
+	Connections map[string]*TFTPConn //Connections active TFTP connection
+	clientwg    sync.WaitGroup       //clientwg wait group to manage client connection
+	Debug       bool                 //Debug enable debuging
+	StatsMgr    StatsMgr             //StatsMgr stats collection manager
+	Stats       bool                 //Stats enable or disable stats collection
 }
 
+//LoadConfig load a config from disk
 func (s *TFTPServer) LoadConfig(c *Config) error {
 	var err error
 	if c.IncomingDir == "" && c.OutgoingDir == "" {
@@ -99,7 +104,6 @@ func (s *TFTPServer) Listen() chan int {
 	s.Connections = make(map[string]*TFTPConn)
 	s.ctrlChan = make(chan int)
 	var err error
-	//s.listenAddr = &net.UDPAddr{IP: net.ParseIP(DefaultIP), Port: DefaultPort}
 	bb := make([]byte, 1024000)
 
 	s.sock, err = net.ListenUDP(s.protocol, s.listenAddr)
@@ -109,8 +113,8 @@ func (s *TFTPServer) Listen() chan int {
 	}
 	s.sock.SetReadBuffer(2048000)
 
+	s.wg.Add(1)
 	go func(msg <-chan int) {
-		s.wg.Add(1)
 		for item := range msg {
 			if item == -1 {
 				break
@@ -123,8 +127,8 @@ func (s *TFTPServer) Listen() chan int {
 		s.wg.Done()
 	}(s.ctrlChan)
 
+	s.wg.Add(1)
 	go func() {
-		s.wg.Add(1)
 		for {
 			//handle each packet in a seperate go routine
 			msgLen, _, _, addr, err := s.sock.ReadMsgUDP(bb, nil)
@@ -146,8 +150,6 @@ func (s *TFTPServer) Listen() chan int {
 			bb = bb[:cap(bb)]
 			log.Println("New Connection from", addr.String())
 			nullBytes := bytes.Count(msg, []byte{'\x00'})
-
-			//TODO: This could be a security issue as a packet could be sent with a bunch of nulls
 
 			//Normal TFTP connection
 			if nullBytes == 3 {
