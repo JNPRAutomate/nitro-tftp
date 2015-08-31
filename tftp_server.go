@@ -104,7 +104,6 @@ func (s *TFTPServer) Listen() chan int {
 	s.Connections = make(map[string]*TFTPConn)
 	s.ctrlChan = make(chan int)
 	var err error
-	//s.listenAddr = &net.UDPAddr{IP: net.ParseIP(DefaultIP), Port: DefaultPort}
 	bb := make([]byte, 1024000)
 
 	s.sock, err = net.ListenUDP(s.protocol, s.listenAddr)
@@ -114,8 +113,8 @@ func (s *TFTPServer) Listen() chan int {
 	}
 	s.sock.SetReadBuffer(2048000)
 
+	s.wg.Add(1)
 	go func(msg <-chan int) {
-		s.wg.Add(1)
 		for item := range msg {
 			if item == -1 {
 				break
@@ -128,8 +127,8 @@ func (s *TFTPServer) Listen() chan int {
 		s.wg.Done()
 	}(s.ctrlChan)
 
+	s.wg.Add(1)
 	go func() {
-		s.wg.Add(1)
 		for {
 			//handle each packet in a seperate go routine
 			msgLen, _, _, addr, err := s.sock.ReadMsgUDP(bb, nil)
@@ -151,8 +150,6 @@ func (s *TFTPServer) Listen() chan int {
 			bb = bb[:cap(bb)]
 			log.Println("New Connection from", addr.String())
 			nullBytes := bytes.Count(msg, []byte{'\x00'})
-
-			//TODO: This could be a security issue as a packet could be sent with a bunch of nulls
 
 			//Normal TFTP connection
 			if nullBytes == 3 {

@@ -26,7 +26,7 @@ type Config struct {
 // Protocol "udp4"
 // Stats true
 func NewConfig() *Config {
-	return &Config{IncomingDir: "./incoming", OutgoingDir: "./outgoing", IP: net.ParseIP("0.0.0.0"), Port: 69, Protocol: "udp4", Stats: true}
+	return &Config{IncomingDir: "./incoming", OutgoingDir: "./outgoing", IP: net.ParseIP("0.0.0.0"), Port: 6969, Protocol: "udp4", Stats: true}
 }
 
 //Open open a new config file
@@ -36,7 +36,7 @@ func (c *Config) Open(config string) error {
 		return err
 	}
 
-	newConfig := &Config{}
+	newConfig := NewConfig()
 	if err := json.Unmarshal(file, &newConfig); err != nil {
 		return err
 	}
@@ -48,23 +48,16 @@ func (c *Config) Open(config string) error {
 	return nil
 }
 
-//MarshalJSON Return
-/*func (c *Config) MarshalJSON() ([]byte, error) {
-	return []byte(fmt.Sprintf("{\"incomingdir\" : %s, \"outgoingdir\" : %s,\"listenip\":\"%s\",\"port\":%d,\"protocol\":\"%s\"}", c.IncomingDir, c.OutgoingDir, c.IP.String(), c.Port, c.Protocol)), nil
-}
-
-//UnmarshalJSON Unmarshal from a []byte to struct
-func (c *Config) UnmarshalJSON(data []byte) error {
-	tc := &Config{}
-	err := json.Unmarshal(data, &tc)
-	if err != nil {
+//StringParse parse a JSON string configuration file
+func (c *Config) StringParse(config string) error {
+	newConfig := NewConfig()
+	if err := json.Unmarshal([]byte(config), &newConfig); err != nil {
 		return err
 	}
-	c.IncomingDir = tc.IncomingDir
-	c.OutgoingDir = tc.OutgoingDir
-	c.IP = net.ParseIP(tc.IP)
-	c.Port = tc.Port
-	c.Protocol = tc.Protocol
+	c.IncomingDir = newConfig.IncomingDir
+	c.OutgoingDir = newConfig.OutgoingDir
+	c.IP = newConfig.IP
+	c.Port = newConfig.Port
+	c.Protocol = newConfig.Protocol
 	return nil
 }
-*/
