@@ -8,19 +8,19 @@ import (
 )
 
 func TestOpenConfig(t *testing.T) {
-	cfg := &Config{}
+	cfg := NewConfig()
 	cfg.Open("/home/rcameron/gopath/src/github.com/robwc/nitro-tftp/example_config.cfg")
 }
 
 func TestConfigLoad(t *testing.T) {
-	cfg := &Config{}
+	cfg := NewConfig()
 	cfg.Open("/home/rcameron/gopath/src/github.com/robwc/nitro-tftp/example_config.cfg")
 	s := &TFTPServer{}
 	s.LoadConfig(cfg)
 }
 
 func TestConfigMarshal(t *testing.T) {
-	cfg := &Config{}
+	cfg := NewConfig()
 	cfg.Open("/home/rcameron/gopath/src/github.com/robwc/nitro-tftp/example_config.cfg")
 	data, err := json.Marshal(cfg)
 	if err != nil {
@@ -30,7 +30,7 @@ func TestConfigMarshal(t *testing.T) {
 }
 
 func TestConfigLoadAndOpen(t *testing.T) {
-	cfg := &Config{}
+	cfg := NewConfig()
 	cfg.Open("/home/rcameron/gopath/src/github.com/robwc/nitro-tftp/example_config.cfg")
 	s := &TFTPServer{}
 	s.LoadConfig(cfg)
@@ -42,7 +42,7 @@ func TestConfigLoadAndOpen(t *testing.T) {
 
 func TestConfigLoadDefaultAndOpen(t *testing.T) {
 	s := &TFTPServer{}
-	s.LoadConfig(&Config{})
+	s.LoadConfig(NewConfig())
 	ctrlChan := s.Listen()
 	timer := time.NewTimer(time.Second * 5)
 	<-timer.C
@@ -50,8 +50,8 @@ func TestConfigLoadDefaultAndOpen(t *testing.T) {
 }
 
 func TestConfigString(t *testing.T) {
-	cfg := &Config{}
-	err := cfg.StringParse("{\"incomingdir\" : \"./incoming\",\"outgoingdir\" : \"./outgoing\",\"listenip\":\"0.0.0.0\",\"port\":6969,\"protocol\":\"udp4\",\"stats\":true}")
+	cfg := NewConfig()
+	err := cfg.StringParse(`{incomingdir : ./incoming,outgoingdir : ./outgoing,listenip:0.0.0.0,port:6969,protocol:udp4,stats:true, statsip:127.0.0.1,statsport:126969}`)
 	if err != nil {
 		t.Error(err)
 	}
@@ -64,7 +64,7 @@ func TestConfigString(t *testing.T) {
 
 func TestConfigStringLoad(t *testing.T) {
 	cfg := &Config{}
-	err := cfg.StringParse("{\"incomingdir\" : \"./incoming\",\"outgoingdir\" : \"./outgoing\",\"listenip\":\"0.0.0.0\",\"port\":6969,\"protocol\":\"udp4\",\"stats\":true}")
+	err := cfg.StringParse(`{incomingdir : ./incoming,outgoingdir : ./outgoing,listenip:0.0.0.0,port:6969,protocol:udp4,stats:true, statsip:127.0.0.1,statsport:126969}}`)
 	if err != nil {
 		t.Error(err)
 	}

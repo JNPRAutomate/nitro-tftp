@@ -110,7 +110,7 @@ func (c *TFTPServer) StartOptions(addr *net.UDPAddr, msg interface{}) {
 
 //StopConn Stop an existing TFTP connection
 func (c *TFTPServer) StopConn(tid string) {
-	if c.Stats {
+	if c.Config.Stats {
 		c.StatsMgr.UpdateClientStats(c.Connections[tid])
 	}
 	delete(c.Connections, tid)
@@ -336,6 +336,7 @@ func (c *TFTPServer) recieveData(tid string) {
 					if !open {
 						log.Debugf("Packet parser closed for client %s", tid)
 						c.clientwg.Done()
+						close(dataChan)
 						return
 					}
 					if binary.BigEndian.Uint16(msg[:2]) == tftp.OpcodeData {
@@ -362,7 +363,6 @@ func (c *TFTPServer) recieveData(tid string) {
 				//TODO: Seperate disk error types
 				log.Error(err)
 				c.sendError(c.Connections[tid].remote, tftp.ErrorDiskFull, tftp.ErrorDiskFullMsg)
-				close(dataChan)
 				r.Close()
 				return
 			}
@@ -404,18 +404,17 @@ func (c *TFTPServer) recieveData(tid string) {
 							} else {
 								log.Printf("Writing file %s from client %s complete, total size %d", c.Connections[tid].filename, tid, c.Connections[tid].BytesRecv)
 							}
-							close(dataChan)
 							log.Debugf("Closing data channel for client %s", tid)
 							c.StopConn(tid)
 							return
 						}
 						//continue to read data
 						c.sendAck(r, tid)
+					} else {
+						log.Debugf("Closing data channel for client %s", tid)
+						c.StopConn(tid)
+						return
 					}
-					close(dataChan)
-					log.Debugf("Closing data channel for client %s", tid)
-					c.StopConn(tid)
-					return
 				}
 			}
 

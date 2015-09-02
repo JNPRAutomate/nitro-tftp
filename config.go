@@ -14,6 +14,8 @@ type Config struct {
 	Port        int    `json:"port"`        //Port port to listen on 69 is the default, requires root or administrator privledges
 	Protocol    string `json:"protocol"`    //Protocol protocol to listen on can be udp,udp4,udp6
 	Stats       bool   `json:"stats"`       //Stats determines if stats are to be collected or not
+	StatsIP     net.IP `json:"statsip"`     //StatsIP the IP address to listen on for stats api 127.0.0.1 default
+	StatsPort   int    `json:"statsport"`   //StatsPort the port to listen on for stats api 126969 default
 }
 
 //NewConfig creates a new config struct and returns it
@@ -25,8 +27,10 @@ type Config struct {
 // Port 69
 // Protocol "udp4"
 // Stats true
+// StatsIP "127.0.0.1" IPv4 localhost IP
+// StatsPort 126969
 func NewConfig() *Config {
-	return &Config{IncomingDir: "./incoming", OutgoingDir: "./outgoing", IP: net.ParseIP("0.0.0.0"), Port: 6969, Protocol: "udp4", Stats: true}
+	return &Config{IncomingDir: "./incoming", OutgoingDir: "./outgoing", IP: net.ParseIP("0.0.0.0"), Port: 6969, Protocol: "udp4", Stats: true, StatsIP: net.ParseIP("127.0.0.1"), StatsPort: 16969}
 }
 
 //Open open a new config file

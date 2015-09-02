@@ -105,10 +105,16 @@ func main() {
 
 	s := &TFTPServer{Debug: debugFlag}
 
-	cfg := &Config{}
+	cfg := NewConfig()
 
 	if configFile != "" && configString == "" {
 		err := cfg.Open(configFile)
+		if err != nil {
+			log.Error(err)
+			os.Exit(1)
+		}
+	} else if configFile == "" && configString != "" {
+		err := cfg.StringParse(configString)
 		if err != nil {
 			log.Error(err)
 			os.Exit(1)
