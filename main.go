@@ -4,12 +4,18 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"math/rand"
+	"net"
 	_ "net/http/pprof"
 	"os"
 	"os/signal"
 	"runtime/pprof"
+	"strconv"
+	"strings"
+	"time"
 
 	log "github.com/Sirupsen/logrus"
+	"github.com/hashicorp/consul/api"
 )
 
 //GitHash set by ld flags at build time
@@ -27,6 +33,7 @@ var AppName = "Nitro TFTP"
 var debugFlag bool
 var configFile string
 var configString string
+var consulConfig string
 var versionFlag bool
 var genconfigFlag bool
 var cpuprofile string
@@ -124,11 +131,44 @@ func main() {
 	s.LoadConfig(cfg)
 	ctrlChan := s.Listen()
 
+	//register as a consul service
+	serviceid := strings.Join([]string{AppName, strconv.Itoa(int(time.Now().Unix() * rand.Int63()))}, "_")
+	if consulConfig != "" {
+		client, err := api.NewClient(api.DefaultConfig())
+		if err != nil {
+			log.Error(err)
+			os.Exit(1)
+		}
+		agent := client.Agent()
+		host, port, err := net.SplitHostPort(s.sock.LocalAddr().String())
+		if err != nil {
+			log.Error(err)
+			os.Exit(1)
+		}
+		iport, err := strconv.Atoi(port)
+		if err != nil {
+			log.Error(err)
+			os.Exit(1)
+		}
+		service := &api.AgentServiceRegistration{ID: serviceid, Name: "tftp", Address: host, Port: iport}
+		agent.ServiceRegister(service)
+	}
+
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, os.Interrupt, os.Kill)
-	sig := <-sigChan
+	<-sigChan
 	close(sigChan)
 	close(ctrlChan)
-	log.Println("Caught Signal", sig)
+
+	if consulConfig != "" {
+		client, err := api.NewClient(api.DefaultConfig())
+		if err != nil {
+			log.Error(err)
+			os.Exit(1)
+		}
+		agent := client.Agent()
+		agent.ServiceDeregister(serviceid)
+	}
+	log.Println("Shutting down $s", AppName)
 	os.Exit(0)
 }
