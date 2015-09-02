@@ -36,8 +36,8 @@ type TFTPServer struct {
 	Connections map[string]*TFTPConn //Connections active TFTP connection
 	clientwg    sync.WaitGroup       //clientwg wait group to manage client connection
 	Debug       bool                 //Debug enable debuging
-	StatsMgr    StatsMgr             //StatsMgr stats collection manager
-	Stats       bool                 //Stats enable or disable stats collection
+	StatsMgr    *StatsMgr            //StatsMgr stats collection manager
+	Config      *Config              //Config complete config passed to server
 }
 
 //LoadConfig load a config from disk
@@ -45,15 +45,12 @@ func (s *TFTPServer) LoadConfig(c *Config) error {
 	var err error
 	if c.IncomingDir == "" && c.OutgoingDir == "" {
 		//load default
-		c = &Config{}
-		c.IncomingDir = "./incoming"
-		c.OutgoingDir = "./outgoing"
-		c.IP = net.ParseIP("0.0.0.0")
-		c.Port = 69
-		c.Protocol = "udp4"
+		c = NewConfig()
+	} else {
+		s.Config = c
+		s.incomingDir = c.IncomingDir
+		s.outgoingDir = c.OutgoingDir
 	}
-	s.incomingDir = c.IncomingDir
-	s.outgoingDir = c.OutgoingDir
 	//check inc dir exists and can be written to
 	iStat, err := os.Stat(c.IncomingDir)
 	if err != nil {
@@ -93,7 +90,7 @@ func (s *TFTPServer) LoadConfig(c *Config) error {
 	//listen addr
 	s.listenAddr, err = net.ResolveUDPAddr(c.Protocol, strings.Join([]string{c.IP.String(), strconv.Itoa(c.Port)}, ":"))
 	if err != nil {
-		panic(err)
+		return err
 	}
 	s.protocol = c.Protocol
 	return nil
@@ -105,6 +102,12 @@ func (s *TFTPServer) Listen() chan int {
 	s.ctrlChan = make(chan int)
 	var err error
 	bb := make([]byte, 1024000)
+
+	//Listen on stats API
+	if s.Config.Stats {
+		s.StatsMgr = NewStatsMgr()
+		s.StatsMgr.StatsListener(s.Config.StatsIP, s.Config.StatsPort, s.ctrlChan)
+	}
 
 	s.sock, err = net.ListenUDP(s.protocol, s.listenAddr)
 	if err != nil {
