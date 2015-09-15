@@ -21,10 +21,21 @@ type StatsMgr struct {
 	StartTime         time.Time               //StartTime time process was started
 	TotalTransferTime time.Duration           //TotalTransferTime total time spent serving files
 	wg                sync.WaitGroup
+	CurrentConns      int
 }
 
 func NewStatsMgr() *StatsMgr {
 	return &StatsMgr{Clients: make(map[string]*ClientStats), StartTime: time.Now()}
+}
+
+//AddConn add new Connections
+func (s *StatsMgr) AddConn() {
+	s.CurrentConns = s.CurrentConns + 1
+}
+
+//CloseConn Close connection
+func (s *StatsMgr) CloseConn() {
+	s.CurrentConns = s.CurrentConns - 1
 }
 
 //UpdateClientStats update the cumulative stats for the client
@@ -64,12 +75,13 @@ func (s *StatsMgr) UpdateClientStats(c *TFTPConn) {
 
 func (s *StatsMgr) StatsAllJSON(w http.ResponseWriter, r *http.Request) {
 	statsAll := struct {
+		CurrentConns      int                     `json:"currconns"`
 		ClientStats       map[string]*ClientStats `json:"clientstats"`
 		TotalBytesRecv    int                     `json:"totalbytesrecv"`
 		TotalBytesSent    int                     `json:"totalbytessent"`
 		StartTime         time.Time               `json:"starttime"`
 		TotalTransferTime time.Duration           `json:"totaltransfertime"`
-	}{s.Clients, s.TotalBytesRecv, s.TotalBytesSent, s.StartTime, s.TotalTransferTime}
+	}{s.CurrentConns, s.Clients, s.TotalBytesRecv, s.TotalBytesSent, s.StartTime, s.TotalTransferTime}
 	statsJSON, err := json.Marshal(statsAll)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
