@@ -25,11 +25,13 @@ func (c *TFTPServer) Start(addr *net.UDPAddr, msg interface{}) {
 			//Setting block to min of 1
 			log.Printf("Sending file %s to client %s", nc.filename, addr.String())
 			c.Connections[addr.String()].block = 1
+			c.StatsMgr.AddConn()
 			c.sendData(addr.String())
 		} else if tftpMsg.Opcode == tftp.OpcodeWrite {
 			//Setting block to min of 0
 			log.Printf("Receiving file %s from client %s", nc.filename, addr.String())
 			c.Connections[addr.String()].block = 0
+			c.StatsMgr.AddConn()
 			c.recieveData(addr.String())
 		}
 		return
@@ -94,12 +96,14 @@ func (c *TFTPServer) StartOptions(addr *net.UDPAddr, msg interface{}) {
 			//Setting block to min of 1
 			log.Printf("Sending file %s to client %s", nc.filename, addr.String())
 			c.Connections[addr.String()].block = 1
+			c.StatsMgr.AddConn()
 			c.sendData(addr.String())
 			return
 		} else if tftpMsg.Opcode == tftp.OpcodeWrite {
 			//Setting block to min of 0
 			log.Printf("Receiving file %s from client %s", nc.filename, addr.String())
 			c.Connections[addr.String()].block = 0
+			c.StatsMgr.AddConn()
 			c.recieveData(addr.String())
 			return
 		}
@@ -113,6 +117,7 @@ func (c *TFTPServer) StopConn(tid string) {
 	if c.Config.Stats {
 		c.StatsMgr.UpdateClientStats(c.Connections[tid])
 	}
+	c.StatsMgr.CloseConn()
 	delete(c.Connections, tid)
 }
 
